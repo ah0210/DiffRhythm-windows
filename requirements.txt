@@ -13,8 +13,8 @@ prefigure==0.0.10
 bitsandbytes
 muq==0.1.0
 mutagen==1.47.0
-pyopenjtalk==0.4.0
-pykakasi==2.3.0
+# pyopenjtalk==0.4.0  # 注释掉，因为编译失败
+# pykakasi==2.3.0  # 注释掉，依赖于pyopenjtalk
 jieba==0.42.1
 cn2an==0.5.23
 pypinyin==0.53.0
@@ -24,3 +24,4 @@ phonemizer==3.3.0
 git+https://github.com/ishine/LangSegment.git
 inflect==7.5.0
 onnxruntime-gpu
+python-dotenv==1.0.0

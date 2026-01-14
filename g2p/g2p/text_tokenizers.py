@@ -28,18 +28,34 @@ class TextTokenizer:
         language_switch: LanguageSwitch = "remove-flags",
         words_mismatch: WordMismatch = "ignore",
     ) -> None:
+        self.language = language
         self.preserve_punctuation_marks = ",.?!;:'…"
-        self.backend = EspeakBackend(
-            language,
-            punctuation_marks=self.preserve_punctuation_marks,
-            preserve_punctuation=preserve_punctuation,
-            with_stress=with_stress,
-            tie=tie,
-            language_switch=language_switch,
-            words_mismatch=words_mismatch,
-        )
-
+        self.preserve_punctuation = preserve_punctuation
+        self.with_stress = with_stress
+        self.tie = tie
+        self.language_switch = language_switch
+        self.words_mismatch = words_mismatch
         self.separator = separator
+        self._backend = None
+
+    def _get_backend(self):
+        """Lazy load the EspeakBackend to avoid import-time errors."""
+        if self._backend is None:
+            try:
+                self._backend = EspeakBackend(
+                    self.language,
+                    punctuation_marks=self.preserve_punctuation_marks,
+                    preserve_punctuation=self.preserve_punctuation,
+                    with_stress=self.with_stress,
+                    tie=self.tie,
+                    language_switch=self.language_switch,
+                    words_mismatch=self.words_mismatch,
+                )
+            except RuntimeError as e:
+                print(f"Warning: espeak not installed on your system. Error: {e}")
+                print("Please install espeak to enable phonemization functionality.")
+                return None
+        return self._backend
 
     # convert chinese punctuation to english punctuation
     def convert_chinese_punctuation(self, text: str) -> str:
@@ -59,6 +75,32 @@ class TextTokenizer:
         return text
 
     def __call__(self, text, strip=True) -> List[str]:
+        backend = self._get_backend()
+        if backend is None:
+            print("Warning: phonemization is not available due to missing espeak installation.")
+            print("Returning original text without phonemization.")
+            
+            text_type = type(text)
+            normalized_text = []
+            for line in str2list(text):
+                line = self.convert_chinese_punctuation(line.strip())
+                line = re.sub(r"[^\w\s_,\.\?!;:\'…]", "", line)
+                line = re.sub(r"\s*([,\.\?!;:\'…])\s*", r"\1", line)
+                line = re.sub(r"\s+", " ", line)
+                normalized_text.append(line)
+            
+            if text_type == str:
+                phonemized = list2str(normalized_text)
+                phonemized = re.sub(r"([,\.\?!;:\'…])", r"|\1|", phonemized)
+                phonemized = re.sub(r"\|+", "|", phonemized)
+                phonemized = phonemized.rstrip("|")
+                return phonemized
+            else:
+                for i in range(len(normalized_text)):
+                    normalized_text[i] = re.sub(r"([,\.\?!;:\'…])", r"|\1|", normalized_text[i])
+                    normalized_text[i] = re.sub(r"\|+", "|", normalized_text[i])
+                    normalized_text[i] = normalized_text[i].rstrip("|")
+                return normalized_text
 
         text_type = type(text)
         normalized_text = []
@@ -69,7 +111,7 @@ class TextTokenizer:
             line = re.sub(r"\s+", " ", line)
             normalized_text.append(line)
         # print("Normalized test: ", normalized_text[0])
-        phonemized = self.backend.phonemize(
+        phonemized = backend.phonemize(
             normalized_text, separator=self.separator, strip=strip, njobs=1
         )
         if text_type == str:

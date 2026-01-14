@@ -14,15 +14,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# 加载 .env 文件中的环境变量配置 - 必须在所有导入之前设置
+import os
+from dotenv import load_dotenv
+load_dotenv()
+
 import torch
 import librosa
 import random
 import json
 from muq import MuQMuLan
 from mutagen.mp3 import MP3
-import os
 import numpy as np
 from huggingface_hub import hf_hub_download
+import requests
+from huggingface_hub.utils import hf_raise_for_status
 
 from sys import path
 path.append(os.getcwd())
@@ -86,7 +92,14 @@ def decode_audio(latents, vae_model, chunked=False, overlap=32, chunk_size=128):
 
 
 def prepare_model(max_frames, device, repo_id="ASLP-lab/DiffRhythm-base"):
+    """准备模型，支持详细的进度日志"""
+    import time
+    
+    print(f"📥 正在准备模型，设备: {device}, 仓库: {repo_id}")
+    
     # prepare cfm model
+    print("🔄 正在下载 CFM 模型...")
+    cfm_start_time = time.time()
     dit_ckpt_path = hf_hub_download(
         repo_id=repo_id, filename="cfm_model.pt", cache_dir="./pretrained"
     )
@@ -101,21 +114,38 @@ def prepare_model(max_frames, device, repo_id="ASLP-lab/DiffRhythm-base"):
     )
     cfm = cfm.to(device)
     cfm = load_checkpoint(cfm, dit_ckpt_path, device=device, use_ema=False)
+    cfm_time = time.time() - cfm_start_time
+    print(f"✅ CFM 模型准备完成，耗时 {cfm_time:.2f} 秒")
 
     # prepare tokenizer
+    print("🔤 正在准备分词器...")
+    tokenizer_start_time = time.time()
     tokenizer = CNENTokenizer()
+    tokenizer_time = time.time() - tokenizer_start_time
+    print(f"✅ 分词器准备完成，耗时 {tokenizer_time:.2f} 秒")
 
     # prepare muq
+    print("🎵 正在准备 MuQ 模型...")
+    muq_start_time = time.time()
     muq = MuQMuLan.from_pretrained("OpenMuQ/MuQ-MuLan-large", cache_dir="./pretrained")
     muq = muq.to(device).eval()
+    muq_time = time.time() - muq_start_time
+    print(f"✅ MuQ 模型准备完成，耗时 {muq_time:.2f} 秒")
 
     # prepare vae
+    print("🔊 正在准备 VAE 模型...")
+    vae_start_time = time.time()
     vae_ckpt_path = hf_hub_download(
         repo_id="ASLP-lab/DiffRhythm-vae",
         filename="vae_model.pt",
         cache_dir="./pretrained",
     )
     vae = torch.jit.load(vae_ckpt_path, map_location="cpu").to(device)
+    vae_time = time.time() - vae_start_time
+    print(f"✅ VAE 模型准备完成，耗时 {vae_time:.2f} 秒")
+    
+    total_time = time.time() - cfm_start_time
+    print(f"🎉 所有模型准备完成，总耗时 {total_time:.2f} 秒")
 
     return cfm, tokenizer, muq, vae
 

@@ -14,37 +14,73 @@ import sys
 # separator=Separator(phone=' ', word=' _ ', syllable='|'),
 separator = Separator(word=" _ ", syllable="|", phone=" ")
 
-phonemizer_zh = EspeakBackend(
-    "cmn", preserve_punctuation=False, with_stress=False, language_switch="remove-flags"
-)
-# phonemizer_zh.separator = separator
+phonemizer_zh = None
+phonemizer_en = None
+phonemizer_ko = None
+phonemizer_fr = None
+phonemizer_de = None
 
-phonemizer_en = EspeakBackend(
-    "en-us",
-    preserve_punctuation=False,
-    with_stress=False,
-    language_switch="remove-flags",
-)
-# phonemizer_en.separator = separator
-
-phonemizer_ko = EspeakBackend(
-    "ko", preserve_punctuation=False, with_stress=False, language_switch="remove-flags"
-)
-# phonemizer_ko.separator = separator
-
-phonemizer_fr = EspeakBackend(
-    "fr-fr",
-    preserve_punctuation=False,
-    with_stress=False,
-    language_switch="remove-flags",
-)
-# phonemizer_fr.separator = separator
-
-phonemizer_de = EspeakBackend(
-    "de", preserve_punctuation=False, with_stress=False, language_switch="remove-flags"
-)
-# phonemizer_de.separator = separator
-
+def _get_phonemizer(language):
+    global phonemizer_zh, phonemizer_en, phonemizer_ko, phonemizer_fr, phonemizer_de
+    
+    if language == "zh" and phonemizer_zh is None:
+        try:
+            phonemizer_zh = EspeakBackend(
+                "cmn", preserve_punctuation=False, with_stress=False, language_switch="remove-flags"
+            )
+        except RuntimeError:
+            print("Warning: espeak not installed, phonemizer will not work properly")
+            return None
+    elif language == "en" and phonemizer_en is None:
+        try:
+            phonemizer_en = EspeakBackend(
+                "en-us",
+                preserve_punctuation=False,
+                with_stress=False,
+                language_switch="remove-flags",
+            )
+        except RuntimeError:
+            print("Warning: espeak not installed, phonemizer will not work properly")
+            return None
+    elif language == "ko" and phonemizer_ko is None:
+        try:
+            phonemizer_ko = EspeakBackend(
+                "ko", preserve_punctuation=False, with_stress=False, language_switch="remove-flags"
+            )
+        except RuntimeError:
+            print("Warning: espeak not installed, phonemizer will not work properly")
+            return None
+    elif language == "fr" and phonemizer_fr is None:
+        try:
+            phonemizer_fr = EspeakBackend(
+                "fr-fr",
+                preserve_punctuation=False,
+                with_stress=False,
+                language_switch="remove-flags",
+            )
+        except RuntimeError:
+            print("Warning: espeak not installed, phonemizer will not work properly")
+            return None
+    elif language == "de" and phonemizer_de is None:
+        try:
+            phonemizer_de = EspeakBackend(
+                "de", preserve_punctuation=False, with_stress=False, language_switch="remove-flags"
+            )
+        except RuntimeError:
+            print("Warning: espeak not installed, phonemizer will not work properly")
+            return None
+    
+    if language == "zh":
+        return phonemizer_zh
+    elif language == "en":
+        return phonemizer_en
+    elif language == "fr":
+        return phonemizer_fr
+    elif language == "ko":
+        return phonemizer_ko
+    elif language == "de":
+        return phonemizer_de
+    return None
 
 lang2backend = {
     "zh": phonemizer_zh,
@@ -60,7 +96,11 @@ token = json.loads(json_data)
 
 
 def phonemizer_g2p(text, language):
-    langbackend = lang2backend[language]
+    langbackend = _get_phonemizer(language)
+    if langbackend is None:
+        print(f"Warning: phonemizer for language '{language}' is not available")
+        return "", []
+    
     phonemes = _phonemize(
         langbackend,
         text,
