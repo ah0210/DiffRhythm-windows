@@ -1,16 +1,39 @@
 import os
 import signal
 import sys
+import logging
 from dotenv import load_dotenv
 load_dotenv()
 
-import gradio as gr
+# 配置日志
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+# 修复Windows终端编码问题
+if sys.platform == 'win32':
+    import codecs
+    import ctypes
+    kernel32 = ctypes.windll.kernel32
+    kernel32.SetConsoleOutputCP(65001)  # 设置控制台编码为UTF-8
+
+logger = logging.getLogger(__name__)
+
+logger.info("=" * 60)
+logger.info("🎵 DiffRhythm 音乐生成系统")
+logger.info("=" * 60)
+
 import torch
 import torchaudio
+import gradio as gr
 from einops import rearrange
 import random
 import numpy as np
-
 from transformers import AutoTokenizer
 import time
 from infer.infer_utils import (
@@ -41,11 +64,11 @@ def get_available_device():
         return 'cpu'
 
 device = get_available_device()
-print(f"🖥️  检测到计算设备: {device}")
+logger.info(f"🖥️  检测到计算设备: {device}")
 
 # 如果是 AMD GPU，设置 ROCm 相关环境变量
 if device == 'cuda' and hasattr(torch, 'is_rocm_available') and torch.is_rocm_available():
-    print("🔴 检测到 AMD ROCm 支持，正在配置 AMD GPU 环境")
+    logger.info("🔴 检测到 AMD ROCm 支持，正在配置 AMD GPU 环境")
     # 设置 ROCm 相关环境变量
     os.environ.setdefault('HSA_OVERRIDE_GFX_VERSION', '9.0.0')  # RX 580 对应的 GFX 版本
     os.environ.setdefault('PYTORCH_ROCM_ARCH', 'gfx803')  # RX 580 的架构
@@ -157,36 +180,25 @@ def inference_with_progress(
     top_p=0.9,
 ):
     """带进度条的推理函数"""
-    print("📊 推理参数配置:")
-    print(f"   • 扩散步数: {num_inference_steps}")
-    print(f"   • CFG 强度: 4.0")
-    print(f"   • 温度参数: {temperature}")
-    print(f"   • Top-p 参数: {top_p}")
-    print(f"   • 开始时间: {start_time.item():.2f} 秒")
-    print(f"   • 分块解码: {'是' if chunked else '否'}")
-    
-    # 创建简单的文本进度条
-    def print_progress_bar(iteration, total, prefix='', suffix='', length=50, fill='█'):
-        """打印文本进度条"""
-        percent = ("{0:.1f}").format(100 * (iteration / float(total)))
-        filled_length = int(length * iteration // total)
-        bar = fill * filled_length + '-' * (length - filled_length)
-        print(f'\r{prefix} |{bar}| {percent}% {suffix}', end='', flush=True)
-        if iteration == total:
-            print()
+    logger.info("📊 推理参数配置:")
+    logger.info(f"   • 扩散步数: {num_inference_steps}")
+    logger.info(f"   • CFG 强度: 4.0")
+    logger.info(f"   • 温度参数: {temperature}")
+    logger.info(f"   • Top-p 参数: {top_p}")
+    logger.info(f"   • 开始时间: {start_time.item():.2f} 秒")
+    logger.info(f"   • 分块解码: {'是' if chunked else '否'}")
     
     # 进度回调函数
     def diffusion_progress_callback(step, total_steps, progress_ratio):
         """扩散过程的进度回调"""
         if step == 0:
-            print(f"🚀 开始扩散过程，共 {total_steps} 步...")
-            print(f"   • 设备: {device}")
-            print(f"   • 内存使用: {torch.cuda.memory_allocated() / 1024**3:.2f} GB" if device == 'cuda' else "   • 使用 CPU 进行推理")
-            print(f"   • 预计完成时间: {total_steps * 0.5:.1f} 秒")
+            logger.info(f"🚀 开始扩散过程，共 {total_steps} 步...")
+            logger.info(f"   • 设备: {device}")
+            logger.info(f"   • 内存使用: {torch.cuda.memory_allocated() / 1024**3:.2f} GB" if device == 'cuda' else "   • 使用 CPU 进行推理")
         elif step == total_steps:
-            print(f"✅ 扩散过程完成，共 {total_steps} 步")
-        else:
-            print_progress_bar(step, total_steps, prefix='扩散进度', suffix=f'步骤 {step}/{total_steps} (进度: {progress_ratio*100:.1f}%)')
+            logger.info(f"✅ 扩散过程完成，共 {total_steps} 步")
+        elif step % 5 == 0:  # 每5步记录一次
+            logger.info(f"   扩散进度: {step}/{total_steps} ({progress_ratio*100:.1f}%)")
     
     with torch.inference_mode():
         # 记录扩散开始时间
@@ -206,24 +218,24 @@ def inference_with_progress(
         )
         
         diffusion_time = time.time() - diffusion_start_time
-        print(f"✅ 扩散过程完成，耗时 {diffusion_time:.2f} 秒")
+        logger.info(f"✅ 扩散过程完成，耗时 {diffusion_time:.2f} 秒")
         
         # 后处理阶段
-        print("🔄 正在进行后处理...")
+        logger.info("🔄 正在进行后处理...")
         
         # 转换数据类型
         generated = generated.to(torch.float32)
         latent = generated.transpose(1, 2)  # [b d t]
         
         # 解码音频
-        print("🎵 正在解码音频...")
+        logger.info("🎵 正在解码音频...")
         output = decode_audio(latent, vae_model, chunked=chunked)
         
         # 重排音频批次
         output = rearrange(output, "b d n -> d (b n)")
         
         # 峰值归一化、裁剪、转换为 int16
-        print("🔧 正在进行音频后处理...")
+        logger.info("🔧 正在进行音频后处理...")
         output = (
             output.to(torch.float32)
             .div(torch.max(torch.abs(output)))
@@ -233,7 +245,7 @@ def inference_with_progress(
             .cpu()
         )
         
-        print("✅ 音频后处理完成")
+        logger.info("✅ 音频后处理完成")
         
         return output
 
@@ -242,65 +254,78 @@ inference = inference_with_progress
 
 def infer_music(lrc, ref_audio_path, text_prompt, current_prompt_type, seed=42, randomize_seed=False, steps=32, cfg_strength=4.0, temperature=0.7, top_p=0.9, file_type='wav', odeint_method='euler', Music_Duration='95s'):
     """Main function to generate music from lyrics and prompts."""
-    print("=" * 60)
-    print("🎵 开始音乐生成流程")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("🎵 开始音乐生成流程")
+    logger.info("=" * 60)
+    logger.info(f"📋 接收到的参数:")
+    logger.info(f"   • 提示类型: {current_prompt_type}, 类型: {type(current_prompt_type)}")
+    logger.info(f"   • 音频提示路径: {ref_audio_path}, 类型: {type(ref_audio_path)}")
+    logger.info(f"   • 文本提示: {text_prompt}, 类型: {type(text_prompt)}")
     
     # 记录开始时间
     total_start_time = time.time()
     
     if randomize_seed:
         seed = random.randint(0, MAX_SEED)
-        print(f"🔢 使用随机种子: {seed}")
+        logger.info(f"🔢 使用随机种子: {seed}")
     else:
-        print(f"🔢 使用固定种子: {seed}")
+        logger.info(f"🔢 使用固定种子: {seed}")
     torch.manual_seed(seed)
     
     # Set up model parameters based on duration
     if Music_Duration == '95s':
         max_frames = 2048
         repo_id = "ASLP-lab/DiffRhythm-base"
-        print("⏱️  选择 95秒 模型 (DiffRhythm-base)")
+        logger.info("⏱️  选择 95秒 模型 (DiffRhythm-base)")
     else:  # '285s'
         max_frames = 6144
         repo_id = "ASLP-lab/DiffRhythm-full"
-        print("⏱️  选择 285秒 模型 (DiffRhythm-full)")
+        logger.info("⏱️  选择 285秒 模型 (DiffRhythm-full)")
     
-    print(f"📊 模型参数: 最大帧数={max_frames}, 模型仓库={repo_id}")
+    logger.info(f"📊 模型参数: 最大帧数={max_frames}, 模型仓库={repo_id}")
     
     # Prepare models
-    print("🔄 正在加载模型...")
+    logger.info("🔄 正在加载模型...")
     model_start_time = time.time()
     cfm, tokenizer, muq, vae = prepare_model(max_frames, device, repo_id=repo_id)
     model_load_time = time.time() - model_start_time
-    print(f"✅ 模型加载完成，耗时 {model_load_time:.2f} 秒")
+    logger.info(f"✅ 模型加载完成，耗时 {model_load_time:.2f} 秒")
 
     try:
         # Process lyrics
-        print("📝 正在处理歌词...")
+        logger.info("📝 正在处理歌词...")
         lrc_prompt, start_time = get_lrc_token(max_frames, lrc, tokenizer, device)
-        print(f"✅ 歌词处理完成，开始时间: {start_time.item():.2f} 秒")
+        logger.info(f"✅ 歌词处理完成，开始时间: {start_time.item():.2f} 秒")
         
-        # Get style prompt based on prompt type
-        if current_prompt_type == 'audio':
-            print("🎧 使用音频提示作为风格参考")
-            style_prompt = get_style_prompt(muq, ref_audio_path)
-        else:
-            print(f"📋 使用文本提示作为风格参考: {text_prompt}")
-            style_prompt = get_style_prompt(muq, prompt=text_prompt)
-        print("✅ 风格提示生成完成")
+        # Get style prompt based on actual input
+        try:
+            # 优先使用文本提示，如果文本提示不为空
+            if text_prompt and text_prompt.strip():
+                logger.info(f"📋 使用文本提示作为风格参考: {text_prompt}")
+                style_prompt = get_style_prompt(muq, prompt=text_prompt)
+            # 否则使用音频提示
+            elif ref_audio_path:
+                logger.info(f"🎧 使用音频提示作为风格参考: {ref_audio_path}")
+                style_prompt = get_style_prompt(muq, ref_audio_path)
+            # 如果两者都为空，抛出错误
+            else:
+                raise gr.Error("请提供有效的音频提示或文本提示")
+            logger.info("✅ 风格提示生成完成")
+        except Exception as e:
+            logger.error(f"❌ 获取风格提示失败: {str(e)}")
+            raise gr.Error(f"获取风格提示失败: {str(e)}")
     except Exception as e:
-        print(f"❌ 处理过程中发生错误: {str(e)}")
+        logger.error(f"❌ 处理过程中发生错误: {str(e)}")
         raise gr.Error(f"Error: {str(e)}")
     
     # Get negative style prompt and reference latent
-    print("🔄 正在生成负向风格提示和参考潜在空间...")
+    logger.info("🔄 正在生成负向风格提示和参考潜在空间...")
     negative_style_prompt = get_negative_style_prompt(device)
     latent_prompt = get_reference_latent(device, max_frames)
-    print("✅ 负向风格提示和参考潜在空间生成完成")
+    logger.info("✅ 负向风格提示和参考潜在空间生成完成")
     
     # Run inference
-    print("🚀 开始音乐推理生成...")
+    logger.info("🚀 开始音乐推理生成...")
     s_t = time.time()
     generated_song = inference_with_progress(
         cfm_model=cfm,
@@ -317,7 +342,7 @@ def infer_music(lrc, ref_audio_path, text_prompt, current_prompt_type, seed=42, 
         top_p=top_p,
     )
     e_t = time.time() - s_t
-    print(f"✅ 推理生成完成，耗时 {e_t:.2f} 秒")
+    logger.info(f"✅ 推理生成完成，耗时 {e_t:.2f} 秒")
     
     # Save the generated song to a file
     output_dir = "output"
@@ -327,20 +352,20 @@ def infer_music(lrc, ref_audio_path, text_prompt, current_prompt_type, seed=42, 
     output_filename = f"diffrhythm_{timestamp}.{file_type}"
     output_path = os.path.join(output_dir, output_filename)
     
-    print(f"💾 正在保存音频文件: {output_path}")
+    logger.info(f"💾 正在保存音频文件: {output_path}")
     torchaudio.save(output_path, generated_song, sample_rate=44100)
     
     # 计算总耗时
     total_time = time.time() - total_start_time
     
-    print("=" * 60)
-    print(f"🎉 音乐生成完成！")
-    print(f"📊 总耗时: {total_time:.2f} 秒")
-    print(f"📁 输出文件: {output_path}")
-    print(f"🎵 音频格式: {file_type}")
-    print(f"🔢 随机种子: {seed}")
-    print(f"⏱️  音乐时长: {Music_Duration}")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info(f"🎉 音乐生成完成！")
+    logger.info(f"📊 总耗时: {total_time:.2f} 秒")
+    logger.info(f"📁 输出文件: {output_path}")
+    logger.info(f"🎵 音频格式: {file_type}")
+    logger.info(f"🔢 随机种子: {seed}")
+    logger.info(f"⏱️  音乐时长: {Music_Duration}")
+    logger.info("=" * 60)
     
     return output_path
 
@@ -553,85 +578,98 @@ def create_language_tab(lang="en"):
     return lrc, audio_prompt, text_prompt, current_prompt_type, seed, randomize_seed, steps, cfg_strength, temperature, top_p, file_type, odeint_method, Music_Duration, lyrics_btn, audio_output
 
 # Create the Gradio interface
-with gr.Blocks() as demo:
-    gr.HTML(f"""
-            <div style="display: flex; align-items: center;">
-                <img src='https://raw.githubusercontent.com/ASLP-lab/DiffRhythm/refs/heads/main/src/DiffRhythm_logo.jpg' 
-                    style='width: 200px; height: 40%; display: block; margin: 0 auto 20px;'>
-            </div>
-            
-            <div style="flex: 1; text-align: center;">
-                <div style="font-size: 2em; font-weight: bold; text-align: center; margin-bottom: 5px">
-                    Di♪♪Rhythm (谛韵)
+try:
+    logger.info("🔧 正在创建Gradio界面...")
+    with gr.Blocks() as demo:
+        gr.HTML(f"""
+                <div style="display: flex; align-items: center;">
+                    <img src='https://raw.githubusercontent.com/ASLP-lab/DiffRhythm/refs/heads/main/src/DiffRhythm_logo.jpg' 
+                        style='width: 200px; height: 40%; display: block; margin: 0 auto 20px;'>
                 </div>
-                <div style="display:flex; justify-content: center; column-gap:4px;">
-                    <a href="https://arxiv.org/abs/2503.01183">
-                        <img src='https://img.shields.io/badge/Arxiv-Paper-blue'>
-                    </a> 
-                    <a href="https://github.com/ASLP-lab/DiffRhythm">
-                        <img src='https://img.shields.io/badge/GitHub-Repo-green'>
-                    </a> 
-                    <a href="https://aslp-lab.github.io/DiffRhythm.github.io/">
-                        <img src='https://img.shields.io/badge/Project-Page-brown'>
-                    </a>
-                </div>
-            </div> 
-            """)
-    
-    # Create tabs for each language
-    with gr.Tabs():
-        # English interface
-        lrc_en, audio_prompt_en, text_prompt_en, current_prompt_type_en, seed_en, randomize_seed_en, steps_en, cfg_strength_en, temperature_en, top_p_en, file_type_en, odeint_method_en, Music_Duration_en, lyrics_btn_en, audio_output_en = create_language_tab("en")
+                
+                <div style="flex: 1; text-align: center;">
+                    <div style="font-size: 2em; font-weight: bold; text-align: center; margin-bottom: 5px">
+                        Di♪♪Rhythm (谛韵)
+                    </div>
+                    <div style="display:flex; justify-content: center; column-gap:4px;">
+                        <a href="https://arxiv.org/abs/2503.01183">
+                            <img src='https://img.shields.io/badge/Arxiv-Paper-blue'>
+                        </a> 
+                        <a href="https://github.com/ASLP-lab/DiffRhythm">
+                            <img src='https://img.shields.io/badge/GitHub-Repo-green'>
+                        </a> 
+                        <a href="https://aslp-lab.github.io/DiffRhythm.github.io/">
+                            <img src='https://img.shields.io/badge/Project-Page-brown'>
+                        </a>
+                    </div>
+                </div> 
+                """)
         
-        # Chinese interface
-        lrc_zh, audio_prompt_zh, text_prompt_zh, current_prompt_type_zh, seed_zh, randomize_seed_zh, steps_zh, cfg_strength_zh, temperature_zh, top_p_zh, file_type_zh, odeint_method_zh, Music_Duration_zh, lyrics_btn_zh, audio_output_zh = create_language_tab("zh")
-    
-    # Connect the generate buttons to the inference function
-    lyrics_btn_en.click(
-        fn=infer_music,
-        inputs=[lrc_en, audio_prompt_en, text_prompt_en, current_prompt_type_en, seed_en, randomize_seed_en, steps_en, cfg_strength_en, temperature_en, top_p_en, file_type_en, odeint_method_en, Music_Duration_en],
-        outputs=audio_output_en
-    )
-    
-    lyrics_btn_zh.click(
-        fn=infer_music,
-        inputs=[lrc_zh, audio_prompt_zh, text_prompt_zh, current_prompt_type_zh, seed_zh, randomize_seed_zh, steps_zh, cfg_strength_zh, temperature_zh, top_p_zh, file_type_zh, odeint_method_zh, Music_Duration_zh],
-        outputs=audio_output_zh
-    )
+        # Create tabs for each language
+        with gr.Tabs():
+            # English interface
+            logger.info("   • 创建英文界面...")
+            lrc_en, audio_prompt_en, text_prompt_en, current_prompt_type_en, seed_en, randomize_seed_en, steps_en, cfg_strength_en, temperature_en, top_p_en, file_type_en, odeint_method_en, Music_Duration_en, lyrics_btn_en, audio_output_en = create_language_tab("en")
+            
+            # Chinese interface
+            logger.info("   • 创建中文界面...")
+            lrc_zh, audio_prompt_zh, text_prompt_zh, current_prompt_type_zh, seed_zh, randomize_seed_zh, steps_zh, cfg_strength_zh, temperature_zh, top_p_zh, file_type_zh, odeint_method_zh, Music_Duration_zh, lyrics_btn_zh, audio_output_zh = create_language_tab("zh")
+        
+        # Connect the generate buttons to the inference function
+        logger.info("   • 连接生成按钮...")
+        lyrics_btn_en.click(
+            fn=infer_music,
+            inputs=[lrc_en, audio_prompt_en, text_prompt_en, current_prompt_type_en, seed_en, randomize_seed_en, steps_en, cfg_strength_en, temperature_en, top_p_en, file_type_en, odeint_method_en, Music_Duration_en],
+            outputs=audio_output_en
+        )
+        
+        lyrics_btn_zh.click(
+            fn=infer_music,
+            inputs=[lrc_zh, audio_prompt_zh, text_prompt_zh, current_prompt_type_zh, seed_zh, randomize_seed_zh, steps_zh, cfg_strength_zh, temperature_zh, top_p_zh, file_type_zh, odeint_method_zh, Music_Duration_zh],
+            outputs=audio_output_zh
+        )
+    logger.info("✅ Gradio界面创建成功")
+except Exception as e:
+    logger.error(f"❌ Gradio界面创建失败: {e}", exc_info=True)
+    sys.exit(1)
 
 def signal_handler(signum, frame):
     """处理中断信号的函数"""
-    print("\n" + "=" * 60)
-    print("⚠️  接收到中断信号，正在优雅退出...")
-    print("=" * 60)
+    logger.info("\n" + "=" * 60)
+    logger.info("⚠️  接收到中断信号，正在优雅退出...")
+    logger.info("=" * 60)
     
     # 清理资源
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     
-    print("✅ 资源清理完成，程序退出")
+    logger.info("✅ 资源清理完成，程序退出")
     sys.exit(0)
 
 if __name__ == "__main__":
     # 注册信号处理器，支持 Ctrl+C 中断
     signal.signal(signal.SIGINT, signal_handler)
     
-    print("=" * 60)
-    print("🎵 DiffRhythm 音乐生成系统")
-    print("=" * 60)
-    print("📋 使用说明:")
-    print("   • 按 Ctrl+C 可以中断程序运行")
-    print("   • 音乐生成过程中可以随时中断")
-    print("   • 中断后会自动清理 GPU 内存")
-    print("=" * 60)
+    logger.info("📋 使用说明:")
+    logger.info("   • 按 Ctrl+C 可以中断程序运行")
+    logger.info("   • 音乐生成过程中可以随时中断")
+    logger.info("   • 中断后会自动清理 GPU 内存")
+    logger.info("=" * 60)
     
     try:
-        demo.launch(css=css)
+        logger.info("🚀 正在启动Gradio服务...")
+        demo.launch(
+            server_name="0.0.0.0",
+            server_port=7860,
+            debug=True,
+            share=False,
+            css=css
+        )
     except KeyboardInterrupt:
-        print("\n" + "=" * 60)
-        print("👋 用户主动中断程序，感谢使用！")
-        print("=" * 60)
+        logger.info("\n" + "=" * 60)
+        logger.info("👋 用户主动中断程序，感谢使用！")
+        logger.info("=" * 60)
         sys.exit(0)
     except Exception as e:
-        print(f"\n❌ 程序运行出错: {str(e)}")
+        logger.error(f"\n❌ 程序运行出错: {str(e)}", exc_info=True)
         sys.exit(1)

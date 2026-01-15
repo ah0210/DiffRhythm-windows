@@ -169,8 +169,13 @@ def get_negative_style_prompt(device):
 def get_style_prompt(model, wav_path=None, prompt=None):
     mulan = model
 
-    if prompt is not None:
+    # 优先使用文本提示
+    if prompt is not None and prompt != "":
         return mulan(texts=prompt).half()
+
+    # 如果没有文本提示，检查音频路径
+    if wav_path is None:
+        raise ValueError("音频路径不能为None，请提供有效的音频文件路径或使用文本提示")
 
     ext = os.path.splitext(wav_path)[-1].lower()
     if ext == ".mp3":

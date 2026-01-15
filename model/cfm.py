@@ -226,7 +226,6 @@ class CFM(nn.Module):
             # 使用原始的odeint方法，但添加进度监控和超时机制
             import threading
             import time
-            import signal
             
             progress_active = True
             odeint_completed = False
@@ -234,27 +233,32 @@ class CFM(nn.Module):
             def progress_monitor():
                 """进度监控线程"""
                 start_time = time.time()
-                step = 0
-                while progress_active and step < steps:
-                    # 模拟进度，每0.5秒更新一次
-                    elapsed = time.time() - start_time
-                    # 假设每一步需要大约0.5秒
-                    estimated_step = min(int(elapsed / 0.5), steps - 1)
-                    progress_callback(estimated_step, steps, estimated_step / steps)
-                    
-                    # 检查是否超时（超过预计时间的2倍）
-                    if elapsed > steps * 0.5 * 2 and not odeint_completed:
-                        progress_callback(estimated_step, steps, estimated_step / steps)
-                        print(f"⚠️  警告：扩散过程可能已卡住，已运行 {elapsed:.1f} 秒")
-                        print(f"   • 当前步骤: {estimated_step}/{steps}")
-                        print(f"   • 建议检查GPU内存使用情况")
-                    
-                    time.sleep(0.5)
-                    step = estimated_step
-                    
-                    # 检查是否应该提前结束
-                    if not progress_active:
+                
+                # 根据设备类型调整超时阈值
+                if self.device == 'cuda':
+                    expected_time_per_step = 1.0  # GPU 每步预计时间（秒）
+                else:
+                    expected_time_per_step = 30.0  # CPU 每步预计时间（秒），大幅增加
+                
+                expected_total_time = steps * expected_time_per_step
+                
+                while progress_active:
+                    # 检查是否已完成
+                    if odeint_completed:
                         break
+                    
+                    # 检查是否超时
+                    elapsed = time.time() - start_time
+                    
+                    # 动态调整超时阈值
+                    if elapsed > expected_total_time * 2:
+                        print(f"⚠️  警告：扩散过程可能已卡住，已运行 {elapsed:.1f} 秒")
+                        print(f"   • 当前设备: {self.device}")
+                        print(f"   • 建议检查内存使用情况")
+                        if self.device != 'cuda':
+                            print(f"   • 提示：在CPU上运行会比GPU慢很多，请耐心等待")
+                    
+                    time.sleep(5.0)  # 每5秒检查一次，减少CPU占用
             
             # 启动进度监控线程
             monitor_thread = threading.Thread(target=progress_monitor)
@@ -265,112 +269,58 @@ class CFM(nn.Module):
             progress_callback(0, steps, 0.0)
             
             try:
-                # 使用原始的ODE求解器配置，添加超时保护（Windows兼容版本）
-                import threading
-                import time
-                
-                # 超时机制
-                class TimeoutError(Exception):
-                    pass
-                
-                def run_with_timeout(func, args=(), kwargs={}, timeout=60):
-                    """带超时的函数执行"""
-                    result = [None]
-                    exception = [None]
-                    
-                    def target():
-                        try:
-                            result[0] = func(*args, **kwargs)
-                        except Exception as e:
-                            exception[0] = e
-                    
-                    thread = threading.Thread(target=target)
-                    thread.daemon = True
-                    thread.start()
-                    thread.join(timeout)
-                    
-                    if thread.is_alive():
-                        raise TimeoutError(f"函数执行超时（{timeout}秒）")
-                    
-                    if exception[0] is not None:
-                        raise exception[0]
-                    
-                    return result[0]
-                
-                print(f"🔍 开始ODE求解，共 {steps} 步，使用设备: {self.device}")
-                
                 # 检查GPU内存使用情况
                 if self.device == 'cuda':
+                    print(f"🔍 开始ODE求解，共 {steps} 步，使用设备: {self.device}")
                     print(f"   • GPU内存使用: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
                     print(f"   • GPU内存峰值: {torch.cuda.max_memory_allocated() / 1024**3:.2f} GB")
+                else:
+                    print(f"🔍 开始ODE求解，共 {steps} 步，使用设备: {self.device}")
+                    print(f"   • 提示：在CPU上运行会比GPU慢很多，请耐心等待")
                 
-                try:
-                    # 使用超时机制执行ODE求解
-                    trajectory = run_with_timeout(
-                        lambda: odeint(fn, y0, t, **self.odeint_kwargs),
-                        timeout=60
-                    )
-                    odeint_completed = True
-                    print(f"✅ ODE求解完成")
-                except TimeoutError:
-                    print("❌ ODE求解超时（60秒），尝试简化配置...")
-                    
-                    # 尝试使用更简单的配置
-                    simple_kwargs = self.odeint_kwargs.copy()
-                    # 使用固定步长的Euler方法，避免自适应步长导致的复杂计算
-                    simple_kwargs['method'] = 'euler'
-                    
-                    try:
-                        trajectory = run_with_timeout(
-                            lambda: odeint(fn, y0, t, **simple_kwargs),
-                            timeout=30
-                        )
-                        odeint_completed = True
-                        print("✅ 简化配置ODE求解完成")
-                    except TimeoutError:
-                        print("❌ 简化配置ODE求解也超时，强制终止...")
-                        raise TimeoutError("ODE求解完全超时")
-                    except Exception as e_simple:
-                        print(f"❌ 简化配置ODE求解出错: {e_simple}")
-                        raise
-                    
+                # 直接使用odeint求解整个时间序列
+                trajectory = odeint(fn, y0, t, **self.odeint_kwargs)
+                odeint_completed = True
+                print(f"✅ ODE求解完成")
+                
             except Exception as e:
                 print(f"❌ ODE求解出错: {e}")
                 # 尝试使用CPU作为备选方案
-                print("⚠️  尝试使用CPU进行ODE求解...")
-                try:
-                    # 将数据移动到CPU
-                    y0_cpu = y0.cpu()
-                    t_cpu = t.cpu()
-                    
-                    # 创建CPU版本的函数
-                    def fn_cpu(t_cpu, y_cpu):
-                        t_gpu = t_cpu.to(self.device)
-                        y_gpu = y_cpu.to(self.device)
-                        result = fn(t_gpu, y_gpu)
-                        return result.cpu()
-                    
-                    # 使用超时机制执行CPU求解
-                    trajectory_cpu = run_with_timeout(
-                        lambda: odeint(fn_cpu, y0_cpu, t_cpu, **self.odeint_kwargs),
-                        timeout=90
-                    )
-                    trajectory = trajectory_cpu.to(self.device)
-                    odeint_completed = True
-                    print("✅ CPU ODE求解完成")
+                if self.device != 'cpu':
+                    print("⚠️  尝试使用CPU进行ODE求解...")
+                    try:
+                        # 将数据移动到CPU
+                        y0_cpu = y0.cpu()
+                        t_cpu = t.cpu()
                         
-                except Exception as e2:
-                    print(f"❌ CPU ODE求解也失败: {e2}")
-                    print("💡 建议尝试以下解决方案：")
-                    print("   1. 减少扩散步数（如从32步减少到16步）")
-                    print("   2. 检查GPU内存使用情况")
-                    print("   3. 重启程序或系统")
+                        # 创建CPU版本的函数
+                        def fn_cpu(t_cpu, y_cpu):
+                            t_gpu = t_cpu.to(self.device)
+                            y_gpu = y_cpu.to(self.device)
+                            result = fn(t_gpu, y_gpu)
+                            return result.cpu()
+                        
+                        # 使用CPU求解
+                        trajectory_cpu = odeint(fn_cpu, y0_cpu, t_cpu, **self.odeint_kwargs)
+                        trajectory = trajectory_cpu.to(self.device)
+                        odeint_completed = True
+                        print("✅ CPU ODE求解完成")
+                            
+                    except Exception as e2:
+                        print(f"❌ CPU ODE求解也失败: {e2}")
+                        print("💡 建议尝试以下解决方案：")
+                        print("   1. 减少扩散步数（如从32步减少到16步）")
+                        print("   2. 检查GPU内存使用情况")
+                        print("   3. 重启程序或系统")
+                        raise
+                else:
                     raise
             finally:
                 # 停止进度监控
                 progress_active = False
+                odeint_completed = True
                 
-            # 最终进度更新
+            # 最终进度更新，确保显示100%
             progress_callback(steps, steps, 1.0)
         else:
             # 使用原始的odeint方法
