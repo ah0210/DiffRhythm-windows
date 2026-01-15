@@ -59,104 +59,234 @@ DiffRhythm（中文名：谛韵，Dì Yùn）是***首个***能够创作全长�
 
 * **2025.3.4 🔥** 我们发布了 [DiffRhythm 论文](https://arxiv.org/abs/2503.01183) 和 [Huggingface Space 演示](https://huggingface.co/spaces/ASLP-lab/DiffRhythm)。
 
-## 待办事项
-- [ ] 动态长度控制
-- [ ] 仅人声
-- [ ] 歌曲扩展
-- [ ] 支持 Colab。
-- [ ] 支持 Docker。
-- [x] 发布 DiffRhythm-full。
-- [x] 发布训练代码。
-- [x] 支持本地部署。
-- [x] 发布论文到 Arxiv。
-- [x] 在 Hugging Face Space 上在线服务。
-
 ## 模型版本
 
-|  模型   | HuggingFace |
-|  ----  | ----  |
-| DiffRhythm-base (1分35秒)  | https://huggingface.co/ASLP-lab/DiffRhythm-base |
-| DiffRhythm-full (4分45秒)  | https://huggingface.co/ASLP-lab/DiffRhythm-full |
-| DiffRhythm-vae  | https://huggingface.co/ASLP-lab/DiffRhythm-vae |
+|  模型   | 类型 | 描述 |
+|  ----  | ---- | ---- |
+| DiffRhythm-base (1分35秒)  | 完整 | 原始扩散模型，需要GPU |
+| DiffRhythm-full (4分45秒)  | 完整 | 完整音乐生成模型 |
+| DiffRhythm-vae  | VAE | 用于音乐编码的变分自编码器 |
+| MusicGen-small | 轻量级 | 快速，CPU友好的音乐生成 |
+| MusicGen-melody | 轻量级 | 专注于旋律的音乐生成 |
+| AI API | API | 基于云的音乐生成 |
 
-## 推理
+## 特性
 
-按照以下步骤克隆仓库并安装环境。
+### 🎵 核心特性
+- **全长音乐生成**（最长可达4分45秒）
+- **文本到音乐** 使用风格提示词生成
+- **音频到音乐** 使用参考音频生成
+- **轻量级模型** 支持CPU和低资源设备
+- **AI API** 集成用于云端生成
 
-```bash 
-# 克隆并进入仓库
-git clone https://github.com/ASLP-lab/DiffRhythm.git
-cd DiffRhythm
+### 🖥️ 设备支持
+- **NVIDIA GPU**：CUDA支持
+- **AMD GPU**：DirectML支持（Windows）/ ROCm支持（Linux）
+- **Apple Silicon**：MPS支持
+- **CPU**：完全兼容
 
-# 安装环境
+### 🌐 多语言支持
+- **中文**：中文界面和提示词支持
+- **English**：英文界面和提示词支持
 
-## espeak-ng
-# 对于 Debian-like 发行版（如 Ubuntu、Mint 等）
-sudo apt-get install espeak-ng
-# 对于 RedHat-like 发行版（如 CentOS、Fedora 等） 
-sudo yum install espeak-ng
-# 对于 MacOS
-brew install espeak-ng
-# 对于 Windows
-# 请访问 https://github.com/espeak-ng/espeak-ng/releases 下载 .msi 安装程序
+### 🛠️ 易于使用
+- **Gradio Web UI**：用户友好的界面
+- **模块化设计**：易于扩展和定制
+- **自动设备检测**：自动使用最佳可用设备
 
+## 安装
 
-## 创建 Python 环境
-conda create -n diffrhythm python=3.10
-conda activate diffrhythm
+### 系统要求
+- **操作系统**：Windows 10/11, macOS, Linux
+- **Python**：3.10或更高版本
+- **GPU**：可选，但推荐用于完整模型
 
-## 或者您可以使用经典的 Python 虚拟环境代替 conda
-python -m venv venv
-# 在 Linux 上激活 venv
-source venv/bin/activate
-# 在 Windows 上激活 venv
-venv\Scripts\activate
-.\venv\Scripts\Activate.ps1
+### 安装步骤
 
-## 安装依赖
+1. **克隆仓库**
+   ```bash
+   git clone https://github.com/ASLP-lab/DiffRhythm.git
+   cd DiffRhythm
+   ```
+
+2. **创建虚拟环境**
+   ```bash
+   # 使用Python venv（推荐Windows）
+   python -m venv venv
+   
+   # 在Windows上激活
+   venv\Scripts\activate
+   
+   # 在macOS/Linux上激活
+   source venv/bin/activate
+   ```
+
+3. **安装依赖**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Windows系统的额外依赖**
+   - 安装 [eSpeak NG](https://github.com/espeak-ng/espeak-ng/releases) 用于语音转换
+   - 设置环境变量：
+     ```
+     PHONEMIZER_ESPEAK_LIBRARY -> C:\Program Files\eSpeak NG\libespeak-ng.dll
+     PHONEMIZER_ESPEAK_PATH -> C:\Program Files\eSpeak NG
+     ```
+
+### GPU支持配置
+
+#### NVIDIA GPU (CUDA)
+```bash
+pip install -r requirements_cuda.txt
+```
+
+#### AMD GPU (DirectML, Windows)
+```bash
+# 创建DirectML特定环境
+python -m venv venv_amd
+venv_amd\Scripts\activate
+pip install torch-directml
 pip install -r requirements.txt
 ```
 
-在 Linux 上，您现在可以简单地使用推理脚本：
+#### AMD GPU (ROCm, Linux)
 ```bash
-# 使用参考 WAV 文件进行推理
-bash scripts/infer_wav_ref.sh
-# 使用文本提示参考进行推理
-bash scripts/infer_prompt_ref.sh
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
+pip install -r requirements.txt
 ```
 
-但在 Windows 上运行推理之前，请确保设置了用户环境变量：\
-`PHONEMIZER_ESPEAK_LIBRARY` -> `C:\Program Files\eSpeak NG\libespeak-ng.dll`\
-`PHONEMIZER_ESPEAK_PATH` -> `C:\Program Files\eSpeak NG`\
-将 `C:\Program Files\eSpeak NG` 更改为您的 eSpeak 安装目录，然后重启电脑以应用更改。
+## 使用
 
-*在 Windows 上运行时，不再需要安装日语语音、mbrola 二进制文件和解压 mbrola_ph 文件夹（如[此处](https://github.com/ASLP-lab/DiffRhythm/issues/15)和[此处](https://github.com/ASLP-lab/DiffRhythm/issues/22)所述）。参见 https://github.com/ASLP-lab/DiffRhythm/issues/17#issuecomment-2705058729、[此提交](https://github.com/ASLP-lab/DiffRhythm/commit/2ea9424274df10670ddc613b5d61cc16d13e2b88)和[此提交](https://github.com/ASLP-lab/DiffRhythm/commit/1ad7229e1a774c9a2a0c4888103dd4ea7176aebb)。*
+### 🚀 快速开始
 
-在此之后，您也可以在 Windows 上运行推理脚本（请注意这里将使用英文歌词）：
-```batch
-rem : 使用参考 WAV 文件进行推理
-call scripts\infer_wav_ref.bat
-rem : 使用文本提示参考进行推理
-call scripts\infer_prompt_ref.bat
+1. **启动Web UI**
+   ```bash
+   python app.py
+   ```
+
+2. **打开浏览器** 访问 `http://localhost:7860`
+
+3. **选择模型类型**：
+   - **DiffRhythm**：完整扩散模型（需要GPU）
+   - **Lightweight**：快速，CPU友好的模型（MusicGen）
+   - **AI API**：基于云的生成
+
+4. **输入提示词** 并点击"生成"！
+
+### 📝 示例提示词
+
+#### 文本提示词
+- `电子舞曲，带有强烈的节拍和合成器旋律`
+- `古典钢琴独奏，带有情感化的旋律`
+- `爵士四重奏，带有萨克斯风和低音提琴`
+
+#### 音频提示词
+- 上传参考音频文件来指导生成
+- 模型将学习风格并生成类似的音乐
+
+### ⚙️ 高级设置
+
+- **时长**：调整生成音乐的长度
+- **步数**：更多步数=更好质量，但生成更慢
+- **温度**：控制随机性（越低=越确定）
+- **Top-p**：控制多样性（越高=更多样化）
+
+## 项目结构
+
+```
+DiffRhythm/
+├── config/              # 配置文件
+├── dataset/             # 训练数据集
+├── g2p/                 # 音素转换
+├── infer/               # 推理模块
+│   ├── ai_api_infer.py      # AI API生成
+│   ├── diffrhythm_infer.py  # DiffRhythm生成
+│   ├── lightweight_infer.py  # 轻量级模型生成
+│   └── infer_utils.py        # 推理工具
+├── model/               # 模型架构
+├── scripts/             # 工具脚本
+├── src/                 # 源文件和资源
+├── train/               # 训练代码
+├── app.py               # 主应用
+├── i18n.py              # 多语言支持
+├── requirements.txt     # 依赖
+└── test_device.py       # 设备检测测试
 ```
 
-lrc 和参考音频的示例文件可以在 `infer/example` 中找到。
+## 开发
 
-您可以使用我们在 huggingface 上提供的[工具](https://huggingface.co/spaces/ASLP-lab/DiffRhythm)来生成 lrc。
+### 模型加载
 
-**注意 DiffRhythm-base 至少需要 8G 的显存。为了满足 8G 显存要求，运行推理时使用 `--chunked` 参数。如果禁用分块解码，可能需要更高的显存。**
+#### 轻量级模型
+```python
+from infer.lightweight_infer import LightweightMusicGenerator
 
-## 训练
+# 加载模型
+generator = LightweightMusicGenerator(device='cpu')
+generator.load_lightweight_model("musicgen-small")
 
-即将推出...
+# 生成音乐
+audio_path = generator.generate_with_lightweight_model(
+    text_prompt="电子舞曲",
+    duration=10,
+    model_type="musicgen-small"
+)
+```
+
+#### AI API
+```python
+from infer.ai_api_infer import AIApiMusicGenerator
+
+# 初始化API生成器
+generator = AIApiMusicGenerator()
+
+# 使用API生成音乐
+audio_path = generator.generate_with_api(
+    text_prompt="流行音乐",
+    duration=10,
+    api_provider="free"
+)
+```
+
+## 测试
+
+### 设备检测
+```bash
+python test_device.py
+```
+
+### 轻量级模型
+```bash
+python test_lightweight_api.py
+```
+
+## 故障排除
+
+### 常见问题
+
+1. **DirectML设备未检测到**
+   - 确保安装了`torch-directml`
+   - 检查您的AMD GPU是否兼容DirectML
+   - 运行`test_device.py`进行诊断
+
+2. **音乐听起来像噪音**
+   - 尝试更具体的文本提示词
+   - 调整生成参数（降低温度）
+   - 减少生成时长
+
+3. **模型加载错误**
+   - 确保有足够的磁盘空间下载模型
+   - 检查互联网连接
+   - 验证Python版本兼容性（3.10+）
 
 ## 许可证和免责声明
 
-DiffRhythm（代码和 DiT 权重）在 [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) 下发布。此开源许可证允许您自由使用、修改和分发模型，只要您包含适当的版权声明和免责声明。
+DiffRhythm（代码和DiT权重）在 [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) 下发布。此开源许可证允许您自由使用、修改和分发模型，只要您包含适当的版权声明和免责声明。
 
-我们不会从此模型中获利。我们的目标是提供高质量的音乐生成基础模型，促进 AI 音乐的创新，为人类创造力的进步做出贡献。我们希望 DiffRhythm 能够成为 AI 生成音乐领域进一步研究和开发的基础。
+我们不会从此模型中获利。我们的目标是提供高质量的音乐生成基础模型，促进AI音乐的创新，为人类创造力的进步做出贡献。我们希望DiffRhythm能够成为AI生成音乐领域进一步研究和开发的基础。
 
-DiffRhythm 能够创作跨多种流派的原创音乐，支持艺术创作、教育和娱乐领域的应用。虽然设计用于积极用例，但潜在风险包括通过风格相似性无意中侵犯版权、不当混合文化音乐元素以及误用生成有害内容。为确保负责任的部署，用户必须实施验证机制以确认音乐原创性，在生成的作品中披露 AI 参与，并在改编受保护风格时获得许可。
+DiffRhythm能够创作跨多种流派的原创音乐，支持艺术创作、教育和娱乐领域的应用。虽然设计用于积极用例，但潜在风险包括通过风格相似性无意中侵犯版权、不当混合文化音乐元素以及误用生成有害内容。为确保负责任的部署，用户必须实施验证机制以确认音乐原创性，在生成的作品中披露AI参与，并在改编受保护风格时获得许可。
 
 ## 引用
 ```
@@ -167,6 +297,7 @@ DiffRhythm 能够创作跨多种流派的原创音乐，支持艺术创作、教
   year={2025}
 }
 ```
+
 ## 联系我们
 
 如果您有兴趣给我们的研究团队留言，请发送邮件至 `nzqiann@gmail.com`。

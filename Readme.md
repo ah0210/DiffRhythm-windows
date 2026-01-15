@@ -1,6 +1,3 @@
-<p align="center">
-    <img src="src/DiffRhythm_logo.jpg" width="400"/>
-<p>
 
 <p align="center">
    <h1>Di♪♪Rhythm: Blazingly Fast and Embarrassingly Simple</br>End-to-End Full-Length Song Generation with Latent Diffusion</h1>
@@ -16,10 +13,6 @@ Ziqian Ning, Huakang Chen, Yuepeng Jiang, Chunbo Hao, Guobin Ma, Shuai Wang, Jix
 
 DiffRhythm (Chinese: 谛韵, Dì Yùn) is the ***first*** open-sourced diffusion-based music generation model that is capable of creating full-length songs. The name combines "Diff" (referencing its diffusion architecture) with "Rhythm" (highlighting its focus on music and song creation). The Chinese name 谛韵 (Dì Yùn) phonetically mirrors "DiffRhythm", where "谛" (attentive listening) symbolizes auditory perception, and "韵" (melodic charm) represents musicality.
 
-
-<p align="center">
-    <img src="src/diffrhythm.jpg" width="90%"/>
-<p>
 
 ## News and Updates
 
@@ -58,94 +51,226 @@ DiffRhythm (Chinese: 谛韵, Dì Yùn) is the ***first*** open-sourced diffusion
 
 * **2025.3.4 🔥** We released the [DiffRhythm paper](https://arxiv.org/abs/2503.01183) and [Huggingface Space demo](https://huggingface.co/spaces/ASLP-lab/DiffRhythm).
 
-## TODOs
-- [ ] Dynamic length control
-- [ ] Vocals only
-- [ ] Song extension
-- [ ] Support Colab.
-- [ ] Support Docker.
-- [x] Release DiffRhythm-full.
-- [x] Release training code.
-- [x] Support local deployment.
-- [x] Release paper to Arxiv.
-- [x] Online serving on Hugging Face Space.
-
 ## Model Versions
 
-|  Model   | HuggingFace |
-|  ----  | ----  |
-| DiffRhythm-base (1m35s)  | https://huggingface.co/ASLP-lab/DiffRhythm-base |
-| DiffRhythm-full (4m45s)  | https://huggingface.co/ASLP-lab/DiffRhythm-full |
-| DiffRhythm-vae  | https://huggingface.co/ASLP-lab/DiffRhythm-vae |
+|  Model   | Type | Description |
+|  ----  | ---- | ---- |
+| DiffRhythm-base (1m35s)  | Full | Original diffusion model, requires GPU |
+| DiffRhythm-full (4m45s)  | Full | Complete music generation model |
+| DiffRhythm-vae  | VAE | Variational autoencoder for music encoding |
+| MusicGen-small | Lightweight | Fast, CPU-friendly music generation |
+| MusicGen-melody | Lightweight | Melody-focused music generation |
+| AI API | API | Cloud-based music generation |
 
-## Inference
+## Features
 
-Following the steps below to clone the repository and install the environment.
+### 🎵 Core Features
+- **Full-length music generation** (up to 4m45s)
+- **Text-to-music** generation using style prompts
+- **Audio-to-music** generation using reference audio
+- **Lightweight model** support for CPU and low-resource devices
+- **AI API** integration for cloud-based generation
 
-```bash 
-# clone and enter the repositry
-git clone https://github.com/ASLP-lab/DiffRhythm.git
-cd DiffRhythm
+### 🖥️ Device Support
+- **NVIDIA GPU**: CUDA support
+- **AMD GPU**: DirectML support (Windows) / ROCm support (Linux)
+- **Apple Silicon**: MPS support
+- **CPU**: Full compatibility
 
-# install the environment
+### 🌐 Multi-language Support
+- **中文**: 中文界面和提示词支持
+- **English**: English interface and prompt support
 
-## espeak-ng
-# For Debian-like distribution (e.g. Ubuntu, Mint, etc.)
-sudo apt-get install espeak-ng
-# For RedHat-like distribution (e.g. CentOS, Fedora, etc.) 
-sudo yum install espeak-ng
-# For MacOS
-brew install espeak-ng
-# For Windows
-# Please visit https://github.com/espeak-ng/espeak-ng/releases to download .msi installer
+### 🛠️ Easy to Use
+- **Gradio Web UI**: User-friendly interface
+- **Modular design**: Easy to extend and customize
+- **Auto device detection**: Automatically uses the best available device
 
-## create python environment
-conda create -n diffrhythm python=3.10
-conda activate diffrhythm
+## Installation
 
-## OR you can use classic Python virtual enviroment instead of conda
-python -m venv venv
-# activate venv on Linux
-source venv/bin/activate
-# activate venv on Windows
-venv\Scripts\activate
+### System Requirements
+- **Operating System**: Windows 10/11, macOS, Linux
+- **Python**: 3.10 or higher
+- **GPU**: Optional, but recommended for full model
 
-## install requirements
+### Installation Steps
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/ASLP-lab/DiffRhythm.git
+   cd DiffRhythm
+   ```
+
+2. **Create a virtual environment**
+   ```bash
+   # Using Python venv (recommended for Windows)
+   python -m venv venv
+   
+   # Activate on Windows
+   venv\Scripts\activate
+   
+   # Activate on macOS/Linux
+   source venv/bin/activate
+   ```
+
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Additional dependencies for Windows**
+   - Install [eSpeak NG](https://github.com/espeak-ng/espeak-ng/releases) for phonetic conversion
+   - Set environment variables:
+     ```
+     PHONEMIZER_ESPEAK_LIBRARY -> C:\Program Files\eSpeak NG\libespeak-ng.dll
+     PHONEMIZER_ESPEAK_PATH -> C:\Program Files\eSpeak NG
+     ```
+
+### GPU Support Configuration
+
+#### NVIDIA GPU (CUDA)
+```bash
+pip install -r requirements_cuda.txt
+```
+
+#### AMD GPU (DirectML, Windows)
+```bash
+# Create a DirectML-specific environment
+python -m venv venv_amd
+venv_amd\Scripts\activate
+pip install torch-directml
 pip install -r requirements.txt
 ```
 
-On Linux you can now simply use the inference script:
+#### AMD GPU (ROCm, Linux)
 ```bash
-# For inference using a reference WAV file
-bash scripts/infer_wav_ref.sh
-# For inference using a text prompt reference
-bash scripts/infer_prompt_ref.sh
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
+pip install -r requirements.txt
 ```
 
-But before running the inference on Windows, make sure you set the user enviroment variables:\
-`PHONEMIZER_ESPEAK_LIBRARY` -> `C:\Program Files\eSpeak NG\libespeak-ng.dll`\
-`PHONEMIZER_ESPEAK_PATH` -> `C:\Program Files\eSpeak NG`\
-Change `C:\Program Files\eSpeak NG` to your eSpeak installation directory and reboot your PC to apply changes.
+## Usage
 
-*Installing Japanese voices, mbrola binaries and unpacking an mbrola_ph folder (as described [here](https://github.com/ASLP-lab/DiffRhythm/issues/15) and [here](https://github.com/ASLP-lab/DiffRhythm/issues/22)) are **no longer required** when running on Windows. See https://github.com/ASLP-lab/DiffRhythm/issues/17#issuecomment-2705058729, [this](https://github.com/ASLP-lab/DiffRhythm/commit/2ea9424274df10670ddc613b5d61cc16d13e2b88) and [this commit](https://github.com/ASLP-lab/DiffRhythm/commit/1ad7229e1a774c9a2a0c4888103dd4ea7176aebb).*
+### 🚀 Quick Start
 
-After this, you will also be able to run inference scripts on Windows (please note that English lyrics will be used here):
-```batch
-rem : For inference using a reference WAV file
-call scripts\infer_wav_ref.bat
-rem : For inference using a text prompt reference
-call scripts\infer_prompt_ref.bat
+1. **Start the Web UI**
+   ```bash
+   python app.py
+   ```
+
+2. **Open your browser** and navigate to `http://localhost:7860`
+
+3. **Choose a model type**:
+   - **DiffRhythm**: Full diffusion model (requires GPU)
+   - **Lightweight**: Fast, CPU-friendly model (MusicGen)
+   - **AI API**: Cloud-based generation
+
+4. **Enter your prompt** and click "Generate"!
+
+### 📝 Example Prompts
+
+#### Text Prompts
+- `Electronic Dance Music with strong beat and synthesizer melody`
+- `Classical piano solo with emotional melody`
+- `Jazz quartet with saxophone and double bass`
+
+#### Audio Prompts
+- Upload a reference audio file to guide the generation
+- The model will learn the style and generate similar music
+
+### ⚙️ Advanced Settings
+
+- **Duration**: Adjust the length of the generated music
+- **Steps**: More steps = better quality, but slower generation
+- **Temperature**: Controls randomness (lower = more deterministic)
+- **Top-p**: Controls diversity (higher = more diverse)
+
+## Project Structure
+
+```
+DiffRhythm/
+├── config/              # Configuration files
+├── dataset/             # Training dataset
+├── g2p/                 # Grapheme-to-phoneme conversion
+├── infer/               # Inference modules
+│   ├── ai_api_infer.py      # AI API generation
+│   ├── diffrhythm_infer.py  # DiffRhythm generation
+│   ├── lightweight_infer.py  # Lightweight model generation
+│   └── infer_utils.py        # Inference utilities
+├── model/               # Model architecture
+├── scripts/             # Utility scripts
+├── src/                 # Source files and resources
+├── train/               # Training code
+├── app.py               # Main application
+├── i18n.py              # Multi-language support
+├── requirements.txt     # Dependencies
+└── test_device.py       # Device detection test
 ```
 
-Example files of lrc and reference audio can be found in `infer/example`.
+## Development
 
-You can use [the tools](https://huggingface.co/spaces/ASLP-lab/DiffRhythm) we provide on huggingface to generate the lrc.
+### Model Loading
 
-**Note that DiffRhythm-base requires a minimum of 8G of VRAM. To meet the 8G VRAM requirement, use the `--chunked` argument when running the inference. Higher VRAM may be required if chunked decoding is disabled.**
+#### Lightweight Model
+```python
+from infer.lightweight_infer import LightweightMusicGenerator
 
-## Training
+# Load the model
+generator = LightweightMusicGenerator(device='cpu')
+generator.load_lightweight_model("musicgen-small")
 
-Coming soon...
+# Generate music
+audio_path = generator.generate_with_lightweight_model(
+    text_prompt="Electronic Dance Music",
+    duration=10,
+    model_type="musicgen-small"
+)
+```
+
+#### AI API
+```python
+from infer.ai_api_infer import AIApiMusicGenerator
+
+# Initialize API generator
+generator = AIApiMusicGenerator()
+
+# Generate music using API
+audio_path = generator.generate_with_api(
+    text_prompt="Pop Music",
+    duration=10,
+    api_provider="free"
+)
+```
+
+## Testing
+
+### Device Detection
+```bash
+python test_device.py
+```
+
+### Lightweight Model
+```bash
+python test_lightweight_api.py
+```
+
+## Troubleshooting
+
+### Common Issues
+
+1. **DirectML Device Not Detected**
+   - Ensure `torch-directml` is installed
+   - Check if your AMD GPU is DirectML-compatible
+   - Run `test_device.py` to diagnose
+
+2. **Music Sounds Like Noise**
+   - Try a more specific text prompt
+   - Adjust generation parameters (lower temperature)
+   - Reduce the generation duration
+
+3. **Model Loading Error**
+   - Ensure you have enough disk space for model downloads
+   - Check your internet connection for model downloads
+   - Verify Python version compatibility (3.10+)
 
 ## License & Disclaimer
 
@@ -164,6 +289,7 @@ DiffRhythm enables the creation of original music across diverse genres, support
   year={2025}
 }
 ```
+
 ## Contact Us
 
 If you are interested in leaving a message to our research team, feel free to email `nzqiann@gmail.com`.
