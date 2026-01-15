@@ -22,6 +22,9 @@ if sys.platform == 'win32':
     kernel32 = ctypes.windll.kernel32
     kernel32.SetConsoleOutputCP(65001)  # 设置控制台编码为UTF-8
 
+# 导入多语言支持模块
+from i18n import LANGUAGES, DEFAULT_LANGUAGE, get_translation, get_available_languages, get_language_names
+
 logger = logging.getLogger(__name__)
 
 logger.info("=" * 60)
@@ -44,6 +47,9 @@ from infer.infer_utils import (
     get_style_prompt,
     prepare_model,
 )
+from infer.diffrhythm_infer import DiffRhythmGenerator
+from infer.lightweight_infer import LightweightMusicGenerator
+from infer.ai_api_infer import AIApiMusicGenerator, AIApiManager
 
 # Global variables
 MAX_SEED = np.iinfo(np.int32).max
@@ -58,9 +64,19 @@ def get_available_device():
     elif hasattr(torch, 'is_rocm_available') and torch.is_rocm_available():
         return 'cuda'  # ROCm 也使用 'cuda' 设备
     # 检测 MPS (Apple Silicon)
-    elif hasattr(torch, 'mps') and torch.mps.is_available():
+    elif hasattr(torch, 'mps') and hasattr(torch.mps, 'is_available') and torch.mps.is_available():
         return 'mps'
+    # 检测 DirectML (Windows上的AMD GPU)
     else:
+        try:
+            import torch_directml
+            # 检查是否有可用的DirectML设备
+            if torch_directml.device_count() > 0:
+                return torch_directml.device(0)  # 使用第一个DirectML设备
+        except ImportError:
+            pass
+        except Exception:
+            pass
         return 'cpu'
 
 device = get_available_device()
@@ -72,98 +88,6 @@ if device == 'cuda' and hasattr(torch, 'is_rocm_available') and torch.is_rocm_av
     # 设置 ROCm 相关环境变量
     os.environ.setdefault('HSA_OVERRIDE_GFX_VERSION', '9.0.0')  # RX 580 对应的 GFX 版本
     os.environ.setdefault('PYTORCH_ROCM_ARCH', 'gfx803')  # RX 580 的架构
-
-# Multi-language support
-LANGUAGES = {
-    "en": {
-        "title": "Di♪♪Rhythm (谛韵)",
-        "tab_music_generate": "Music Generate",
-        "label_lyrics": "Lyrics",
-        "placeholder_lyrics": "Input the full lyrics in LRC format",
-        "tab_audio_prompt": "Audio Prompt",
-        "tab_text_prompt": "Text Prompt",
-        "label_text_prompt": "Text Prompt",
-        "placeholder_text_prompt": "Enter the Text Prompt, eg: emotional piano pop",
-        "accordion_advanced": "Advanced Settings",
-        "label_seed": "Seed",
-        "label_randomize_seed": "Randomize seed",
-        "label_diffusion_steps": "Diffusion Steps",
-        "label_cfg_strength": "CFG Strength",
-        "label_ode_solver": "ODE Solver",
-        "label_output_format": "Output Format",
-        "accordion_best_practices": "Best Practices Guide",
-        "label_music_duration": "Music Duration",
-        "btn_generate": "Generate",
-        "label_audio_result": "Audio Result",
-        "label_audio_examples": "Audio Examples",
-        "label_text_examples": "Text Examples",
-        "label_lrc_examples": "Lrc Examples",
-        "markdown_best_practices": """
-        1. **Lyrics Format Requirements**
-            - Each line must follow: `[mm:ss.xx]Lyric content`
-            - Example of valid format:
-            ``` 
-            [00:10.00]Moonlight spills through broken blinds
-            [00:13.20]Your shadow dances on the dashboard shrine
-            ```
-        2. **Audio Prompt Requirements**
-            - Reference audio should be ≥ 1 second, audio >10 seconds will be randomly clipped into 10 seconds
-            - For optimal results, the 10-second clips should be carefully selected
-            - Shorter clips may lead to incoherent generation
-        3. **Supported Languages**
-            - **Chinese and English**
-            - More languages comming soon
-
-        4. **Others** 
-            - If loading audio result is slow, you can select Output Format as mp3 in Advanced Settings.
-        """,
-        "language_selector": "Language / 语言"
-    },
-    "zh": {
-        "title": "Di♪♪Rhythm (谛韵)",
-        "tab_music_generate": "音乐生成",
-        "label_lyrics": "歌词",
-        "placeholder_lyrics": "输入完整的歌词，使用 LRC 格式",
-        "tab_audio_prompt": "音频提示",
-        "tab_text_prompt": "文本提示",
-        "label_text_prompt": "文本提示",
-        "placeholder_text_prompt": "输入文本提示，例如：情感钢琴流行音乐",
-        "accordion_advanced": "高级设置",
-        "label_seed": "随机种子",
-        "label_randomize_seed": "随机化种子",
-        "label_diffusion_steps": "扩散步数",
-        "label_cfg_strength": "CFG 强度",
-        "label_ode_solver": "ODE 求解器",
-        "label_output_format": "输出格式",
-        "accordion_best_practices": "最佳实践指南",
-        "label_music_duration": "音乐时长",
-        "btn_generate": "生成",
-        "label_audio_result": "音频结果",
-        "label_audio_examples": "音频示例",
-        "label_text_examples": "文本示例",
-        "label_lrc_examples": "歌词示例",
-        "markdown_best_practices": """
-        1. **歌词格式要求**
-            - 每行必须遵循格式：`[mm:ss.xx]歌词内容`
-            - 有效格式示例：
-            ``` 
-            [00:10.00]月光透过破碎的百叶窗洒落
-            [00:13.20]你的影子在仪表盘神龛上舞动
-            ```
-        2. **音频提示要求**
-            - 参考音频应 ≥ 1 秒，音频 > 10 秒将被随机裁剪为 10 秒
-            - 为获得最佳效果，应仔细选择 10 秒片段
-            - 较短的片段可能导致生成不连贯
-        3. **支持的语言**
-            - **中文和英文**
-            - 更多语言即将推出
-
-        4. **其他** 
-            - 如果音频结果加载缓慢，您可以在高级设置中选择输出格式为 mp3。
-        """,
-        "language_selector": "语言 / Language"
-    }
-}
 
 def inference_with_progress(
     cfm_model,
@@ -252,7 +176,7 @@ def inference_with_progress(
 # 保持原有函数名兼容性
 inference = inference_with_progress
 
-def infer_music(lrc, ref_audio_path, text_prompt, current_prompt_type, seed=42, randomize_seed=False, steps=32, cfg_strength=4.0, temperature=0.7, top_p=0.9, file_type='wav', odeint_method='euler', Music_Duration='95s'):
+def infer_music(lrc, ref_audio_path, text_prompt, current_prompt_type, seed=42, randomize_seed=False, steps=32, cfg_strength=4.0, temperature=0.7, top_p=0.9, file_type='wav', odeint_method='euler', Music_Duration='95s', model_type='lightweight', api_provider='free', lightweight_model_type='musicgen-small'):
     """Main function to generate music from lyrics and prompts."""
     logger.info("=" * 60)
     logger.info("🎵 开始音乐生成流程")
@@ -261,6 +185,8 @@ def infer_music(lrc, ref_audio_path, text_prompt, current_prompt_type, seed=42, 
     logger.info(f"   • 提示类型: {current_prompt_type}, 类型: {type(current_prompt_type)}")
     logger.info(f"   • 音频提示路径: {ref_audio_path}, 类型: {type(ref_audio_path)}")
     logger.info(f"   • 文本提示: {text_prompt}, 类型: {type(text_prompt)}")
+    logger.info(f"   • 模型类型: {model_type}, 类型: {type(model_type)}")
+    logger.info(f"   • API提供商: {api_provider}, 类型: {type(api_provider)}")
     
     # 记录开始时间
     total_start_time = time.time()
@@ -272,88 +198,81 @@ def infer_music(lrc, ref_audio_path, text_prompt, current_prompt_type, seed=42, 
         logger.info(f"🔢 使用固定种子: {seed}")
     torch.manual_seed(seed)
     
-    # Set up model parameters based on duration
-    if Music_Duration == '95s':
-        max_frames = 2048
-        repo_id = "ASLP-lab/DiffRhythm-base"
-        logger.info("⏱️  选择 95秒 模型 (DiffRhythm-base)")
-    else:  # '285s'
-        max_frames = 6144
-        repo_id = "ASLP-lab/DiffRhythm-full"
-        logger.info("⏱️  选择 285秒 模型 (DiffRhythm-full)")
+    # 检查是否有有效的提示
+    if model_type in ['ai_api']:
+        # AI API 只支持文本提示
+        if not text_prompt or not text_prompt.strip():
+            raise gr.Error("请提供有效的文本提示")
+    elif model_type in ['lightweight', 'full']:
+        # 轻量级模型和完整模型支持文本提示或音频提示
+        if (not text_prompt or not text_prompt.strip()) and not ref_audio_path:
+            raise gr.Error("请提供有效的音频提示或文本提示")
     
-    logger.info(f"📊 模型参数: 最大帧数={max_frames}, 模型仓库={repo_id}")
-    
-    # Prepare models
-    logger.info("🔄 正在加载模型...")
-    model_start_time = time.time()
-    cfm, tokenizer, muq, vae = prepare_model(max_frames, device, repo_id=repo_id)
-    model_load_time = time.time() - model_start_time
-    logger.info(f"✅ 模型加载完成，耗时 {model_load_time:.2f} 秒")
-
-    try:
-        # Process lyrics
-        logger.info("📝 正在处理歌词...")
-        lrc_prompt, start_time = get_lrc_token(max_frames, lrc, tokenizer, device)
-        logger.info(f"✅ 歌词处理完成，开始时间: {start_time.item():.2f} 秒")
+    # 根据模型类型选择生成方式
+    if model_type == 'lightweight':
+        # 使用轻量级模型生成
+        logger.info(f"⚡ 使用轻量级模型生成音乐，模型类型: {lightweight_model_type}")
+        lightweight_gen = LightweightMusicGenerator(device=device)
+        output_path = lightweight_gen.generate_with_lightweight_model(
+            text_prompt=text_prompt,
+            wav_path=ref_audio_path,
+            duration=int(Music_Duration.replace('s', '')),
+            steps=steps,
+            model_type=lightweight_model_type
+        )
+    elif model_type == 'ai_api':
+        # 使用AI API生成
+        logger.info(f"🌐 使用AI API生成音乐，提供商: {api_provider}")
+        ai_gen = AIApiMusicGenerator(device=device)
+        output_path = ai_gen.generate(
+            text_prompt=text_prompt,
+            duration=int(Music_Duration.replace('s', '')),
+            api_provider=api_provider
+        )
+    else:
+        # 使用DiffRhythm模型生成
+        logger.info("📦 使用DiffRhythm模型生成音乐")
+        # Set up model parameters based on duration
+        if Music_Duration == '95s':
+            max_frames = 2048
+            repo_id = "ASLP-lab/DiffRhythm-base"
+            logger.info("⏱️  选择 95秒 模型 (DiffRhythm-base)")
+        else:  # '285s'
+            max_frames = 6144
+            repo_id = "ASLP-lab/DiffRhythm-full"
+            logger.info("⏱️  选择 285秒 模型 (DiffRhythm-full)")
         
-        # Get style prompt based on actual input
+        logger.info(f"📊 模型参数: 最大帧数={max_frames}, 模型仓库={repo_id}")
+        
+        # 使用DiffRhythmGenerator生成器
+        diffrhythm_gen = DiffRhythmGenerator(device=device)
+        diffrhythm_gen.load_model(max_frames, repo_id)
+        
         try:
-            # 优先使用文本提示，如果文本提示不为空
-            if text_prompt and text_prompt.strip():
-                logger.info(f"📋 使用文本提示作为风格参考: {text_prompt}")
-                style_prompt = get_style_prompt(muq, prompt=text_prompt)
-            # 否则使用音频提示
-            elif ref_audio_path:
-                logger.info(f"🎧 使用音频提示作为风格参考: {ref_audio_path}")
-                style_prompt = get_style_prompt(muq, ref_audio_path)
-            # 如果两者都为空，抛出错误
-            else:
-                raise gr.Error("请提供有效的音频提示或文本提示")
-            logger.info("✅ 风格提示生成完成")
+            # 生成音乐
+            generated_song = diffrhythm_gen.generate_with_progress(
+                lrc=lrc,
+                ref_prompt=text_prompt if text_prompt and text_prompt.strip() else None,
+                ref_audio_path=ref_audio_path,
+                chunked=True,
+                num_inference_steps=steps,
+                temperature=temperature,
+                top_p=top_p
+            )
         except Exception as e:
-            logger.error(f"❌ 获取风格提示失败: {str(e)}")
-            raise gr.Error(f"获取风格提示失败: {str(e)}")
-    except Exception as e:
-        logger.error(f"❌ 处理过程中发生错误: {str(e)}")
-        raise gr.Error(f"Error: {str(e)}")
-    
-    # Get negative style prompt and reference latent
-    logger.info("🔄 正在生成负向风格提示和参考潜在空间...")
-    negative_style_prompt = get_negative_style_prompt(device)
-    latent_prompt = get_reference_latent(device, max_frames)
-    logger.info("✅ 负向风格提示和参考潜在空间生成完成")
-    
-    # Run inference
-    logger.info("🚀 开始音乐推理生成...")
-    s_t = time.time()
-    generated_song = inference_with_progress(
-        cfm_model=cfm,
-        vae_model=vae,
-        cond=latent_prompt,
-        text=lrc_prompt,
-        duration=max_frames,
-        style_prompt=style_prompt,
-        negative_style_prompt=negative_style_prompt,
-        start_time=start_time,
-        chunked=True,
-        num_inference_steps=steps,
-        temperature=temperature,
-        top_p=top_p,
-    )
-    e_t = time.time() - s_t
-    logger.info(f"✅ 推理生成完成，耗时 {e_t:.2f} 秒")
-    
-    # Save the generated song to a file
-    output_dir = "output"
-    os.makedirs(output_dir, exist_ok=True)
-    
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    output_filename = f"diffrhythm_{timestamp}.{file_type}"
-    output_path = os.path.join(output_dir, output_filename)
-    
-    logger.info(f"💾 正在保存音频文件: {output_path}")
-    torchaudio.save(output_path, generated_song, sample_rate=44100)
+            logger.error(f"❌ DiffRhythm生成失败: {str(e)}")
+            raise gr.Error(f"DiffRhythm生成失败: {str(e)}")
+        
+        # Save the generated song to a file
+        output_dir = "output"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+        output_filename = f"diffrhythm_{timestamp}.{file_type}"
+        output_path = os.path.join(output_dir, output_filename)
+        
+        logger.info(f"💾 正在保存音频文件: {output_path}")
+        torchaudio.save(output_path, generated_song, sample_rate=44100)
     
     # 计算总耗时
     total_time = time.time() - total_start_time
@@ -390,7 +309,7 @@ css = """
 
 """
 
-def create_language_tab(lang="en"):
+def create_language_tab(lang=DEFAULT_LANGUAGE):
     """Create a complete interface for a specific language."""
     lang_dict = LANGUAGES[lang]
     
@@ -468,6 +387,33 @@ def create_language_tab(lang="en"):
                         )
                 
                 with gr.Accordion(lang_dict["accordion_advanced"], open=False):
+                    # 模型类型选择
+                    model_type = gr.Radio(
+                        ["diffrhythm", "lightweight", "ai_api"], 
+                        label="模型类型" if lang == "zh" else "Model Type",
+                        value="lightweight",  # 将轻量级模型设为默认选项
+                        interactive=True,
+                        elem_id="model_type_radio"
+                    )
+                    
+                    # 轻量级模型选择
+                    lightweight_model_type = gr.Dropdown(
+                        ["musicgen-small", "musicgen-melody"],
+                        label="轻量级模型" if lang == "zh" else "Lightweight Model",
+                        value="musicgen-small",
+                        interactive=True,
+                        elem_id="lightweight_model_dropdown"
+                    )
+                    
+                    # API提供商选择
+                    api_provider = gr.Dropdown(
+                        ["free", "baidu", "tencent"],
+                        label="API提供商" if lang == "zh" else "API Provider",
+                        value="free",
+                        interactive=True,
+                        elem_id="api_provider_dropdown"
+                    )
+                    
                     seed = gr.Slider(
                         label=lang_dict["label_seed"],
                         minimum=0,
@@ -575,7 +521,7 @@ def create_language_tab(lang="en"):
             elem_id="lrc-examples-container",
         )
     
-    return lrc, audio_prompt, text_prompt, current_prompt_type, seed, randomize_seed, steps, cfg_strength, temperature, top_p, file_type, odeint_method, Music_Duration, lyrics_btn, audio_output
+    return lrc, audio_prompt, text_prompt, current_prompt_type, seed, randomize_seed, steps, cfg_strength, temperature, top_p, file_type, odeint_method, Music_Duration, model_type, api_provider, lightweight_model_type, lyrics_btn, audio_output
 
 # Create the Gradio interface
 try:
@@ -609,23 +555,23 @@ try:
         with gr.Tabs():
             # English interface
             logger.info("   • 创建英文界面...")
-            lrc_en, audio_prompt_en, text_prompt_en, current_prompt_type_en, seed_en, randomize_seed_en, steps_en, cfg_strength_en, temperature_en, top_p_en, file_type_en, odeint_method_en, Music_Duration_en, lyrics_btn_en, audio_output_en = create_language_tab("en")
+            lrc_en, audio_prompt_en, text_prompt_en, current_prompt_type_en, seed_en, randomize_seed_en, steps_en, cfg_strength_en, temperature_en, top_p_en, file_type_en, odeint_method_en, Music_Duration_en, model_type_en, api_provider_en, lightweight_model_type_en, lyrics_btn_en, audio_output_en = create_language_tab("en")
             
             # Chinese interface
             logger.info("   • 创建中文界面...")
-            lrc_zh, audio_prompt_zh, text_prompt_zh, current_prompt_type_zh, seed_zh, randomize_seed_zh, steps_zh, cfg_strength_zh, temperature_zh, top_p_zh, file_type_zh, odeint_method_zh, Music_Duration_zh, lyrics_btn_zh, audio_output_zh = create_language_tab("zh")
+            lrc_zh, audio_prompt_zh, text_prompt_zh, current_prompt_type_zh, seed_zh, randomize_seed_zh, steps_zh, cfg_strength_zh, temperature_zh, top_p_zh, file_type_zh, odeint_method_zh, Music_Duration_zh, model_type_zh, api_provider_zh, lightweight_model_type_zh, lyrics_btn_zh, audio_output_zh = create_language_tab("zh")
         
         # Connect the generate buttons to the inference function
         logger.info("   • 连接生成按钮...")
         lyrics_btn_en.click(
             fn=infer_music,
-            inputs=[lrc_en, audio_prompt_en, text_prompt_en, current_prompt_type_en, seed_en, randomize_seed_en, steps_en, cfg_strength_en, temperature_en, top_p_en, file_type_en, odeint_method_en, Music_Duration_en],
+            inputs=[lrc_en, audio_prompt_en, text_prompt_en, current_prompt_type_en, seed_en, randomize_seed_en, steps_en, cfg_strength_en, temperature_en, top_p_en, file_type_en, odeint_method_en, Music_Duration_en, model_type_en, api_provider_en, lightweight_model_type_en],
             outputs=audio_output_en
         )
         
         lyrics_btn_zh.click(
             fn=infer_music,
-            inputs=[lrc_zh, audio_prompt_zh, text_prompt_zh, current_prompt_type_zh, seed_zh, randomize_seed_zh, steps_zh, cfg_strength_zh, temperature_zh, top_p_zh, file_type_zh, odeint_method_zh, Music_Duration_zh],
+            inputs=[lrc_zh, audio_prompt_zh, text_prompt_zh, current_prompt_type_zh, seed_zh, randomize_seed_zh, steps_zh, cfg_strength_zh, temperature_zh, top_p_zh, file_type_zh, odeint_method_zh, Music_Duration_zh, model_type_zh, api_provider_zh, lightweight_model_type_zh],
             outputs=audio_output_zh
         )
     logger.info("✅ Gradio界面创建成功")
