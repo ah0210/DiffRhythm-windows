@@ -71,7 +71,9 @@ class LightweightMusicGenerator:
             pipe = MusicgenForConditionalGeneration.from_pretrained(
                 model_name, 
                 cache_dir="./pretrained",
-                torch_dtype=torch.float32 if self.device == 'cpu' else torch.float16
+                # 根据设备选择合适的精度
+                # CPU和DirectML设备使用float32，其他GPU设备使用float16
+                torch_dtype=torch.float32 if (self.device == 'cpu' or (hasattr(self.device, 'type') and self.device.type == 'privateuseone')) else torch.float16
             ).to(self.device)
             
             # 优化模型加载
@@ -170,7 +172,7 @@ class LightweightMusicGenerator:
                 max_new_tokens = min(
                     required_tokens,
                     max_position_embeddings // 4,  # 使用1/4的最大位置嵌入，确保安全
-                    8000  # 最大不超过8000个token
+                    5000  # 降低最大token数，提高生成质量
                 )
                 
                 print(f"   • 生成token数量: {max_new_tokens}")
@@ -185,18 +187,45 @@ class LightweightMusicGenerator:
                 
                 # 使用model.generate方法生成音频
                 print("   • 正在生成音频...")
+                
+                # 对于DirectML设备，可能需要在CPU上运行模型生成
+                # 因为DirectML可能不支持某些MusicGen模型所需的操作
+                original_device = current_pipe.device
+                if hasattr(original_device, 'type') and original_device.type == 'privateuseone':
+                    print("   • DirectML设备检测到，尝试在CPU上运行模型生成")
+                    # 将模型转换为float32精度，因为CPU不支持某些float16操作
+                    current_pipe = current_pipe.to('cpu', dtype=torch.float32)
+                    inputs = inputs.to('cpu')
+                
                 with torch.no_grad():
-                    # 使用优化的生成参数，提高音频质量
-                    audio_values = current_pipe.generate(
-                        **inputs,
-                        max_new_tokens=max_new_tokens,
-                        do_sample=True,
-                        temperature=0.6,  # 降低随机性，提高音频质量
-                        top_p=0.90,  # 合理的概率质量保留
-                        guidance_scale=1.0,  # 对于MusicGen-small，1.0是更稳定的指导权重
-                        use_cache=True,  # 启用缓存，提高生成速度
-                        num_return_sequences=1  # 生成一个序列
-                    )
+                    try:
+                        # 使用优化的生成参数，提高音频质量
+                        # 降低temperature，提高生成的确定性和质量
+                        audio_values = current_pipe.generate(
+                            **inputs,
+                            max_new_tokens=max_new_tokens,
+                            do_sample=True,
+                            temperature=0.4,  # 降低温度，提高生成质量
+                            top_p=0.95,  # 提高top_p，增加生成的多样性但保持质量
+                            guidance_scale=1.5,  # 提高指导权重，使生成更符合提示
+                            use_cache=True,  # 启用缓存，提高生成速度
+                            num_return_sequences=1  # 生成一个序列
+                        )
+                        print("   • 音频生成成功")
+                    except Exception as e:
+                        print(f"   • 音频生成失败，回退到简单波形生成: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        # 回退到简单波形生成
+                        output_path = f"output/lightweight_{int(time.time())}.wav"
+                        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                        self._generate_valid_wav(output_path, duration, text_prompt)
+                        print(f"✅ 简单波形生成完成，输出文件: {output_path}")
+                        return output_path
+                
+                # 将模型和数据放回原始设备
+                if hasattr(original_device, 'type') and original_device.type == 'privateuseone':
+                    current_pipe = current_pipe.to(original_device)
                 
                 # 生成输出文件路径
                 output_path = f"output/lightweight_{int(time.time())}.wav"
@@ -207,9 +236,23 @@ class LightweightMusicGenerator:
                 import numpy as np
                 
                 # 获取音频数据并转换为numpy数组
-                audio_values = audio_values.cpu().numpy()[0, 0]
+                try:
+                    audio_values = audio_values.cpu().numpy()[0, 0]
+                    print("   • 音频数据转换成功")
+                except Exception as e:
+                    print(f"   • 音频数据转换失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # 回退到简单波形生成
+                    output_path = f"output/lightweight_{int(time.time())}.wav"
+                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                    self._generate_valid_wav(output_path, duration, text_prompt)
+                    print(f"✅ 简单波形生成完成，输出文件: {output_path}")
+                    return output_path
                 
                 # 调试：检查音频数据的统计信息
+                print(f"   • 音频数据类型: {type(audio_values)}")
+                print(f"   • 音频数据形状: {audio_values.shape}")
                 print(f"   • 音频数据范围: {audio_values.min():.6f} 到 {audio_values.max():.6f}")
                 print(f"   • 音频数据平均值: {audio_values.mean():.6f}")
                 print(f"   • 音频数据标准差: {audio_values.std():.6f}")
@@ -235,19 +278,34 @@ class LightweightMusicGenerator:
                     target_peak = 0.8  # 目标峰值，避免削波
                     audio_values = audio_values * (target_peak / peak_value)
                     print(f"   • 归一化音频，峰值从 {peak_value:.6f} 调整到 {target_peak}")
+                    # 重新计算归一化后的音频能量
+                    audio_energy = np.sum(audio_values ** 2) / len(audio_values)
+                    print(f"   • 归一化后音频能量: {audio_energy:.6f}")
                 
                 # 3. 如果音频能量仍然过低，进行增益处理
-                audio_energy = np.sum(audio_values ** 2) / len(audio_values)
-                if audio_energy < 0.01:
+                if audio_energy < 0.02:  # 调整增益阈值，避免过度增益
                     print(f"   • 音频能量过低，应用增益处理")
-                    # 计算增益因子，将音频能量提升到0.05左右
-                    gain_factor = np.sqrt(0.05 / max(audio_energy, 1e-8))
-                    # 限制最大增益，避免噪音过度放大
-                    gain_factor = min(gain_factor, 5.0)  # 最大增益不超过5倍
+                    # 计算增益因子，将音频能量提升到0.03左右（降低目标能量）
+                    target_energy = 0.03
+                    gain_factor = np.sqrt(target_energy / max(audio_energy, 1e-8))
+                    # 限制最大增益，避免噪音过度放大（降低最大增益）
+                    max_gain = 3.0  # 最大增益不超过3倍
+                    gain_factor = min(gain_factor, max_gain)
+                    
+                    # 计算应用增益后的峰值，避免削波
+                    expected_peak = np.max(np.abs(audio_values)) * gain_factor
+                    if expected_peak > 0.9:
+                        # 如果预期峰值超过0.9，调整增益因子
+                        gain_factor = 0.9 / np.max(np.abs(audio_values))
+                        print(f"   • 调整增益因子以避免削波，新增益因子: {gain_factor:.2f}")
+                    
                     audio_values = audio_values * gain_factor
                     audio_values = np.clip(audio_values, -1.0, 1.0)
                     print(f"   • 应用增益因子: {gain_factor:.2f}")
                     print(f"   • 增益后音频数据范围: {audio_values.min():.6f} 到 {audio_values.max():.6f}")
+                    # 重新计算增益后的音频能量
+                    audio_energy = np.sum(audio_values ** 2) / len(audio_values)
+                    print(f"   • 增益后音频能量: {audio_energy:.6f}")
                 
                 # MusicGen生成的音频是float32类型，范围在[-1, 1]
                 # 需要转换为int16格式才能保存为标准WAV文件
