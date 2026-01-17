@@ -265,44 +265,259 @@ python test_lightweight_api.py
 
 ### 常见问题
 
-1. **DirectML设备未检测到**
-   - 确保安装了`torch-directml`
-   - 检查您的AMD GPU是否兼容DirectML
-   - 运行`test_device.py`进行诊断
 
-2. **音乐听起来像噪音**
-   - 尝试更具体的文本提示词
-   - 调整生成参数（降低温度）
-   - 减少生成时长
+toolName: todo_write
+            
+status: success
+          
+Todos updated: 5 items
+          
 
-3. **模型加载错误**
-   - 确保有足够的磁盘空间下载模型
-   - 检查互联网连接
-   - 验证Python版本兼容性（3.10+）
+        
+            
+toolName: view_files
+            
+status: success
+          
+            
+filePath: e:\mygit\2026\DiffRhythm-windows\infer\lightweight_infer.py
+          
 
-## 许可证和免责声明
+        
+            
+toolName: search_codebase
+            
+status: success
+          
+query: app.py 中 infer_music 对 lightweight 的 Music_Duration / 音频提示处理位置
+          
 
-DiffRhythm（代码和DiT权重）在 [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0) 下发布。此开源许可证允许您自由使用、修改和分发模型，只要您包含适当的版权声明和免责声明。
+        
+            
+toolName: apply_patch
+            
+status: failed
+          
+          
 
-我们不会从此模型中获利。我们的目标是提供高质量的音乐生成基础模型，促进AI音乐的创新，为人类创造力的进步做出贡献。我们希望DiffRhythm能够成为AI生成音乐领域进一步研究和开发的基础。
+        
+            
+toolName: edit_file_update
+            
+status: success
+          
+            
+filePath: e:/mygit/2026/DiffRhythm-windows/infer/lightweight_infer.py
+          
+changes: 
+          
 
-DiffRhythm能够创作跨多种流派的原创音乐，支持艺术创作、教育和娱乐领域的应用。虽然设计用于积极用例，但潜在风险包括通过风格相似性无意中侵犯版权、不当混合文化音乐元素以及误用生成有害内容。为确保负责任的部署，用户必须实施验证机制以确认音乐原创性，在生成的作品中披露AI参与，并在改编受保护风格时获得许可。
+        
+            
+toolName: view_files
+            
+status: success
+          
+            
+filePath: e:\mygit\2026\DiffRhythm-windows\app.py
+          
 
-## 引用
-```
-@article{ning2025diffrhythm,
-  title={{DiffRhythm}: Blazingly Fast and Embarrassingly Simple End-to-End Full-Length Song Generation with Latent Diffusion},
-  author={Ziqian, Ning and Huakang, Chen and Yuepeng, Jiang and Chunbo, Hao and Guobin, Ma and Shuai, Wang and Jixun, Yao and Lei, Xie},
-  journal={arXiv preprint arXiv:2503.01183},
-  year={2025}
-}
-```
+        
+            
+toolName: apply_patch
+            
+status: failed
+          
+          
 
-## 联系我们
+        
+            
+toolName: edit_file_update
+            
+status: success
+          
+            
+filePath: e:/mygit/2026/DiffRhythm-windows/infer/lightweight_infer.py
+          
+changes: 
+          
 
-如果您有兴趣给我们的研究团队留言，请发送邮件至 `nzqiann@gmail.com`。
-<p align="center">
-    <a href="http://www.nwpu-aslp.org/">
-        <img src="src/ASLP.jpg" width="400"/>
-    </a>
-</p>
+        
+            
+toolName: apply_patch
+            
+status: failed
+          
+          
+
+        
+            
+toolName: edit_file_update
+            
+status: success
+          
+            
+filePath: e:/mygit/2026/DiffRhythm-windows/app.py
+          
+changes: 
+          
+
+        
+            
+toolName: apply_patch
+            
+status: failed
+          
+          
+
+        
+            
+toolName: edit_file_update
+            
+status: success
+          
+            
+filePath: e:/mygit/2026/DiffRhythm-windows/test_lightweight_api.py
+          
+changes: 
+          
+
+        
+            
+toolName: GetDiagnostics
+            
+status: success
+          
+          
+
+        
+            
+toolName: todo_write
+            
+status: success
+          
+Todos updated: 5 items
+          
+
+        
+            
+toolName: run_command
+            
+status: success
+          
+command: .\venv\Scripts\python.exe test_lightweight_api.py undefined
+          
+
+        
+            
+toolName: apply_patch
+            
+status: failed
+          
+          
+
+        
+            
+toolName: edit_file_update
+            
+status: success
+          
+            
+filePath: e:/mygit/2026/DiffRhythm-windows/infer/lightweight_infer.py
+          
+changes: 
+          
+
+        
+            
+toolName: GetDiagnostics
+            
+status: success
+          
+          
+
+        
+            
+toolName: run_command
+            
+status: success
+          
+command: .\venv\Scripts\python.exe test_lightweight_api.py undefined
+          
+
+        
+            
+toolName: run_command
+            
+status: success
+          
+command: .\venv\Scripts\python.exe -c "import os,wave; from infer.lightweight_infer import LightweightMusicGenerator as G; g=G(device='cpu'); p=g.generate_with_lightweight_model(text_prompt='Orchestral cinematic, 120 bpm, strings, brass, drums, clear rhythm', duration=15, model_type='musicgen-small'); print('path',p); wf=wave.open(p,'rb'); print('sr',wf.getframerate(),'frames',wf.getnframes(),'sec',wf.getnframes()/wf.getframerate()); wf.close()" undefined
+          
+
+        
+            
+toolName: todo_write
+            
+status: success
+          
+Todos updated: 1 items
+          
+
+        
+            
+toolName: todo_write
+            
+status: success
+          
+Todos updated: 5 items
+          
+
+        
+            
+toolName: run_command
+            
+status: running
+          
+command: .\venv\Scripts\python.exe app.py undefined
+          
+
+        
+            
+toolName: check_command_status
+            
+status: success
+          
+          
+
+        
+            
+toolName: check_command_status
+            
+status: success
+          
+          
+
+        
+            
+toolName: open_preview
+            
+status: success
+          
+预览
+          
+有，而且我已经把最影响“只出呜声/时长不对/音频提示不生效”的几个点直接优化掉了。
+
+**这次改动解决了什么**
+- 轻量级模型（musicgen-small）之前把 token 上限卡在 `2048/4=512`，所以你输入 95s 最终只能得到 ~10s；现在改为按目标时长计算 token，并在 CPU 上允许到约 30s（例如 15s 能稳定生成 14.9s）。
+- 轻量级“音频提示”之前基本等同于走回退波形（容易是“呜声”）；现在 `musicgen-melody` 支持真正用音频提示生成。
+- 后处理增加了 DC 去除 + 高通/低通滤波，并在必要时裁剪到目标时长，能明显减少低频嗡声与“时长漂移”。
+- Web UI 里如果 lightweight 选了 95s/285s，会自动限制到 30s；如果只给音频提示却选了 `musicgen-small`，会明确提示你切到 `musicgen-melody`（避免 silent fallback 出“呜声”）。
+
+**修改位置**
+- 轻量级生成逻辑与后处理：[lightweight_infer.py](file:///e:/mygit/2026/DiffRhythm-windows/infer/lightweight_infer.py)
+- Web UI 对 lightweight 时长/音频提示的限制：[app.py](file:///e:/mygit/2026/DiffRhythm-windows/app.py)
+- 测试用例同步（音频提示改为走 musicgen-melody）：[test_lightweight_api.py](file:///e:/mygit/2026/DiffRhythm-windows/test_lightweight_api.py)
+
+**你现在怎么用（建议）**
+- 想用“参考音频”引导：轻量级模型请选择 `musicgen-melody`，并最好同时给一个文本提示词。
+- 想生成更长更像“整首歌”的：用 DiffRhythm（建议 CUDA GPU），lightweight 仍然更适合 10–30 秒片段。

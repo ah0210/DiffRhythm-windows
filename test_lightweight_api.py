@@ -46,18 +46,24 @@ def test_lightweight_model():
         
         # 测试3: 使用音频提示生成（模拟）
         print("\n🎧 测试使用音频提示生成:")
-        # 创建一个临时的空WAV文件作为模拟音频提示
         temp_wav_path = "temp_test.wav"
+        import numpy as np
+        sample_rate = 32000
+        t = np.linspace(0, 6, int(sample_rate * 6), endpoint=False)
+        audio = (0.2 * np.sin(2 * np.pi * 220 * t)).astype(np.float32)
+        audio_i16 = (audio * 32767).astype(np.int16)
         with wave.open(temp_wav_path, 'wb') as wf:
-            wf.setnchannels(2)
+            wf.setnchannels(1)
             wf.setsampwidth(2)
-            wf.setframerate(44100)
-            wf.writeframes(b'')
+            wf.setframerate(sample_rate)
+            wf.writeframes(audio_i16.tobytes())
         
         output_path2 = lightweight_gen.generate_with_lightweight_model(
+            text_prompt="Orchestral cinematic",
             wav_path=temp_wav_path,
             duration=3,
-            steps=5
+            steps=5,
+            model_type="musicgen-melody"
         )
         print(f"✅ 音频提示生成成功，输出文件: {output_path2}")
         

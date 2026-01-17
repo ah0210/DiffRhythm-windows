@@ -73,7 +73,8 @@ class LightweightMusicGenerator:
                 cache_dir="./pretrained",
                 # 根据设备选择合适的精度
                 # CPU和DirectML设备使用float32，其他GPU设备使用float16
-                torch_dtype=torch.float32 if (self.device == 'cpu' or (hasattr(self.device, 'type') and self.device.type == 'privateuseone')) else torch.float16
+                torch_dtype=torch.float32 if (self.device == 'cpu' or (hasattr(self.device, 'type') and self.device.type == 'privateuseone')) else torch.float16,
+                attn_implementation="eager"
             ).to(self.device)
             
             # 优化模型加载
@@ -126,12 +127,14 @@ class LightweightMusicGenerator:
         else:
             raise ValueError("请提供有效的文本提示或音频提示")
         
+        if wav_path and not is_text_prompt and model_type != "musicgen-melody":
+            raise ValueError("音频提示仅支持 musicgen-melody，请切换模型或提供文本提示")
+        
         print(f"   • 请求时长: {duration}秒")
         print(f"   • 设备: {self.device}")
         print(f"   • 当前模型: {self.current_model}")
         
-        # 使用MusicGen模型生成音乐
-        if current_pipe is not None and is_text_prompt:
+        if current_pipe is not None and (is_text_prompt or (wav_path and model_type == "musicgen-melody")):
             try:
                 # 检查模型的最大位置嵌入限制
                 # 使用try-except块处理不同的配置结构
@@ -165,25 +168,44 @@ class LightweightMusicGenerator:
                 # 计算需要的token数量
                 required_tokens = int(actual_duration * tokens_per_second)
                 
-                # 使用保守的生成参数，确保不超过模型限制
-                # 1. 基于调整后的时长计算
-                # 2. 不超过模型最大位置嵌入的1/4
-                # 3. 不超过8000个token（保守限制）
-                max_new_tokens = min(
-                    required_tokens,
-                    max_position_embeddings // 4,  # 使用1/4的最大位置嵌入，确保安全
-                    5000  # 降低最大token数，提高生成质量
-                )
+                max_new_tokens = min(required_tokens, max_position_embeddings - 16)
+                if self.device == 'cpu' or (hasattr(self.device, 'type') and self.device.type == 'privateuseone'):
+                    max_new_tokens = min(max_new_tokens, 1500)
+                else:
+                    max_new_tokens = min(max_new_tokens, 2000)
                 
                 print(f"   • 生成token数量: {max_new_tokens}")
                 print(f"   • 预计生成时长: {max_new_tokens / tokens_per_second:.2f}秒")
                 
-                # 生成音乐输入
-                inputs = self.processor(
-                    text=[text_prompt],
-                    padding=True,
-                    return_tensors="pt"
-                ).to(self.device)
+                if wav_path and model_type == "musicgen-melody":
+                    import librosa
+                    import numpy as np
+                    wav, _ = librosa.load(wav_path, sr=sample_rate, mono=True)
+                    if wav is None or len(wav) == 0:
+                        raise ValueError("音频提示为空，请提供有效的音频文件")
+                    wav = wav.astype(np.float32)
+                    try:
+                        inputs = self.processor(
+                            text=[text_prompt or ""],
+                            audio=wav,
+                            sampling_rate=sample_rate,
+                            padding=True,
+                            return_tensors="pt"
+                        ).to(self.device)
+                    except Exception:
+                        inputs = self.processor(
+                            text=[text_prompt or ""],
+                            audio=[wav],
+                            sampling_rate=sample_rate,
+                            padding=True,
+                            return_tensors="pt"
+                        ).to(self.device)
+                else:
+                    inputs = self.processor(
+                        text=[text_prompt],
+                        padding=True,
+                        return_tensors="pt"
+                    ).to(self.device)
                 
                 # 使用model.generate方法生成音频
                 print("   • 正在生成音频...")
@@ -264,17 +286,21 @@ class LightweightMusicGenerator:
                 # 音频后处理：改进音频质量
                 import scipy.signal as signal
                 
-                # 1. 应用低通滤波器，减少高频噪音
-                # 设计一个简单的低通滤波器，截止频率为8kHz
-                sos = signal.butter(10, 8000, 'low', fs=sample_rate, output='sos')
-                audio_values = signal.sosfilt(sos, audio_values)
-                print(f"   • 应用低通滤波器，减少高频噪音")
+                audio_values = audio_values.astype(np.float32)
+                audio_values = audio_values - float(np.mean(audio_values))
+                hp_sos = signal.butter(4, 30, 'highpass', fs=sample_rate, output='sos')
+                audio_values = signal.sosfilt(hp_sos, audio_values)
+                lp_sos = signal.butter(8, 12000, 'low', fs=sample_rate, output='sos')
+                audio_values = signal.sosfilt(lp_sos, audio_values)
+                print(f"   • 应用高通/低通滤波器，减少低频嗡声与高频噪音")
                 
-                # 2. 归一化音频数据，确保有足够的音量
-                # 计算音频的峰值
+                target_samples = int(actual_duration * sample_rate)
+                if target_samples > 0 and len(audio_values) > target_samples:
+                    audio_values = audio_values[:target_samples]
+                    print(f"   • 裁剪音频到目标时长: {actual_duration}秒")
+                
                 peak_value = np.max(np.abs(audio_values))
                 if peak_value > 0:
-                    # 归一化到合适的范围
                     target_peak = 0.8  # 目标峰值，避免削波
                     audio_values = audio_values * (target_peak / peak_value)
                     print(f"   • 归一化音频，峰值从 {peak_value:.6f} 调整到 {target_peak}")
@@ -282,15 +308,14 @@ class LightweightMusicGenerator:
                     audio_energy = np.sum(audio_values ** 2) / len(audio_values)
                     print(f"   • 归一化后音频能量: {audio_energy:.6f}")
                 
-                # 3. 如果音频能量仍然过低，进行增益处理
-                if audio_energy < 0.02:  # 调整增益阈值，避免过度增益
+                rms = float(np.sqrt(np.mean(audio_values ** 2)))
+                print(f"   • RMS: {rms:.6f}")
+                
+                if rms < 0.05:
                     print(f"   • 音频能量过低，应用增益处理")
-                    # 计算增益因子，将音频能量提升到0.03左右（降低目标能量）
-                    target_energy = 0.03
-                    gain_factor = np.sqrt(target_energy / max(audio_energy, 1e-8))
-                    # 限制最大增益，避免噪音过度放大（降低最大增益）
-                    max_gain = 3.0  # 最大增益不超过3倍
-                    gain_factor = min(gain_factor, max_gain)
+                    target_rms = 0.08
+                    gain_factor = target_rms / max(rms, 1e-8)
+                    gain_factor = min(gain_factor, 4.0)
                     
                     # 计算应用增益后的峰值，避免削波
                     expected_peak = np.max(np.abs(audio_values)) * gain_factor

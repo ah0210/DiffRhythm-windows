@@ -212,11 +212,18 @@ def infer_music(lrc, ref_audio_path, text_prompt, current_prompt_type, seed=42, 
     if model_type == 'lightweight':
         # 使用轻量级模型生成
         logger.info(f"⚡ 使用轻量级模型生成音乐，模型类型: {lightweight_model_type}")
+        requested_duration = int(Music_Duration.replace('s', ''))
+        effective_duration = requested_duration
+        if requested_duration > 30:
+            logger.warning(f"⏱️  轻量级模型不支持 {requested_duration}s，已自动限制为 30s")
+            effective_duration = 30
+        if ref_audio_path and (not text_prompt or not text_prompt.strip()) and lightweight_model_type != "musicgen-melody":
+            raise gr.Error("轻量级模型使用音频提示时，请选择 musicgen-melody 或提供文本提示")
         lightweight_gen = LightweightMusicGenerator(device=device)
         output_path = lightweight_gen.generate_with_lightweight_model(
             text_prompt=text_prompt,
             wav_path=ref_audio_path,
-            duration=int(Music_Duration.replace('s', '')),
+            duration=effective_duration,
             steps=steps,
             model_type=lightweight_model_type
         )
